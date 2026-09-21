@@ -139,7 +139,7 @@ defmodule UAParser.IndexTest do
 
   describe "requirement/1" do
     test "a plain literal is its own requirement" do
-      assert Index.requirement("ArcGIS Client Using WinInet") == {:all, "ArcGIS Client Using WinInet"}
+      assert Index.requirement("ArcGIS Client Using WinInet") == {:all, "arcgis client using wininet"}
     end
 
     test "escaped metacharacters count as literal text" do
@@ -147,21 +147,21 @@ defmodule UAParser.IndexTest do
     end
 
     test "a quantified character cannot extend the run" do
-      assert Index.requirement("Colou?r/(\\d+)") == {:all, "Colo"}
+      assert Index.requirement("Colou?r/(\\d+)") == {:all, "colo"}
     end
 
     test "a mandatory group's content is mined" do
-      assert Index.requirement("(GeoEvent Server) (\\d+)") == {:all, "GeoEvent Server"}
-      assert Index.requirement("(OperationsDashboard)-(?:Windows)-(\\d+)") == {:all, "OperationsDashboard"}
+      assert Index.requirement("(GeoEvent Server) (\\d+)") == {:all, "geoevent server"}
+      assert Index.requirement("(OperationsDashboard)-(?:Windows)-(\\d+)") == {:all, "operationsdashboard"}
     end
 
     test "a quantified group's content is not mined" do
-      assert Index.requirement("(?:GeoEvent Server)?SomeOtherThing") == {:all, "SomeOtherThing"}
+      assert Index.requirement("(?:GeoEvent Server)?SomeOtherThing") == {:all, "someotherthing"}
     end
 
     test "an alternation becomes an any-of requirement" do
       assert {:any, literals} = Index.requirement("\\b(MobileIron|FireWeb|ANTGalio)/(\\d+)")
-      assert Enum.sort(literals) == ["ANTGalio", "FireWeb", "MobileIron"]
+      assert Enum.sort(literals) == ["antgalio", "fireweb", "mobileiron"]
     end
 
     test "an alternation with a branch that yields nothing is not provable" do
@@ -174,20 +174,39 @@ defmodule UAParser.IndexTest do
     end
 
     test "alternation inside a group leaves literals outside it usable" do
-      assert Index.requirement("(Collector|Explorer|Workforce)-Application/(\\d+)") == {:all, "-Application/"}
+      assert Index.requirement("(Collector|Explorer|Workforce)-Application/(\\d+)") == {:all, "-application/"}
     end
 
     test "lookarounds are never mined" do
-      assert Index.requirement("(?=Chromium)Safari") == {:all, "Safari"}
-      assert Index.requirement("(?!Chromium)Safari") == {:all, "Safari"}
+      assert Index.requirement("(?=Chromium)Safari") == {:all, "safari"}
+      assert Index.requirement("(?!Chromium)Safari") == {:all, "safari"}
     end
 
-    test "a character class breaks the run" do
-      assert Index.requirement("HbbTV/\\d+\\.\\d+ \\(.{0,30}; ?([a-zA-Z]+)") == {:all, "HbbTV/"}
+    test "a range or negated character class breaks the run" do
+      assert Index.requirement("HbbTV/\\d+\\.\\d+ \\(.{0,30}; ?([a-zA-Z]+)") == {:all, "hbbtv/"}
+      assert Index.requirement("Build[a-z]{1,10}Version") == {:all, "version"}
+      assert Index.requirement("Build[^x]Version") == {:all, "version"}
+    end
+
+    test "a class whose members all fold to one character extends the run" do
+      assert Index.requirement("[Ss]pider/(\\d+)") == {:all, "spider/"}
+      assert Index.requirement("[Ss][Pp][Ii][Dd][Ee][Rr]") == {:all, "spider"}
+      assert Index.requirement("Web[Cc]rawler") == {:all, "webcrawler"}
+    end
+
+    test "a quantified single-fold class still cannot extend the run" do
+      assert Index.requirement("Spider[Bb]?Crawler") == {:all, "crawler"}
+    end
+
+    test "an any-of set nested inside a mandatory group is still required" do
+      assert {:any, literals} =
+               Index.requirement("^.{0,200}?([A-Za-z0-9]{0,50}(?:[Aa]rchiver|[Bb]ot|[Ss]pider))/(\\d+)")
+
+      assert Enum.sort(literals) == ["archiver", "bot", "spider"]
     end
 
     test "a wildcard breaks the run" do
-      assert Index.requirement("Mozilla.{1,200}(Ddg)/(\\d+)") == {:all, "Mozilla"}
+      assert Index.requirement("Mozilla.{1,200}(Ddg)/(\\d+)") == {:all, "mozilla"}
     end
 
     test "a run shorter than the minimum is not worth indexing" do

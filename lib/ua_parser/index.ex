@@ -24,22 +24,28 @@ defmodule UAParser.Index do
   satisfied, in their original order, so `find/2` preserves exactly the
   first-match-wins semantics of a full linear scan.
 
+  Literals are matched case-insensitively: they are folded when mined and
+  the subject is folded once per call. That costs one pass over the string
+  and makes requirements slightly less selective, but it lets a class like
+  `[Bb]` pin a character, which is worth far more than it costs.
+
   ## Correctness
 
   The index may only ever *narrow* the set of patterns tested; it must never
   exclude a pattern that could match. Every rule below is therefore
   conservative: anything that cannot be proven yields `nil`, which falls
   back to always testing that pattern. Specifically, a literal run is broken
-  by anything optional or variable (quantifiers, wildcards, character
-  classes), group contents are only mined when the group is mandatory, and
-  lookarounds are never mined at all.
+  by anything optional or variable (quantifiers, wildcards, ranges and
+  negated classes), group contents are only mined when the group is
+  mandatory, and lookarounds are never mined at all. A class is mined only
+  when every one of its members folds to the same character.
   """
 
-  # A single required literal has to be distinctive to be worth indexing;
-  # a one or two character string appears in almost every user agent. The
-  # members of an "any of" set can be shorter, since needing one of several
-  # specific names is already a strong filter.
-  @min_all_length 4
+  # A required literal has to be distinctive to be worth indexing; a one or
+  # two character string appears in almost every user agent. Three is where
+  # it starts paying: it is what "bot" needs, and that one literal alone
+  # decides a pattern that costs 12 us to fail.
+  @min_all_length 3
   @min_any_length 3
 
   # Characters that are only escaped to strip their regex meaning, so the
@@ -127,8 +133,10 @@ defmodule UAParser.Index do
   def candidates(%__MODULE__{always: always}, <<>>), do: always
 
   def candidates(%__MODULE__{always: always, trie: trie}, string) do
-    string
-    |> from_each_offset(trie, byte_size(string), 0, always)
+    folded = String.downcase(string)
+
+    folded
+    |> from_each_offset(trie, byte_size(folded), 0, always)
     |> Enum.sort()
     |> Enum.dedup()
   end
@@ -169,10 +177,13 @@ defmodule UAParser.Index do
   ## Examples
 
       iex> UAParser.Index.requirement("Chrome/(\\\\d+)\\\\.(\\\\d+)")
-      {:all, "Chrome/"}
+      {:all, "chrome/"}
 
       iex> UAParser.Index.requirement("(Googlebot|Bingbot)/(\\\\d+)")
-      {:any, ["Googlebot", "Bingbot"]}
+      {:any, ["googlebot", "bingbot"]}
+
+      iex> UAParser.Index.requirement("[Ss]pider/(\\\\d+)")
+      {:all, "spider/"}
 
       iex> UAParser.Index.requirement("(\\\\d+)|(\\\\w+)")
       nil
@@ -188,8 +199,20 @@ defmodule UAParser.Index do
         [{:all, best} | Enum.map(any_sets, &{:any, &1})]
         |> Enum.filter(&viable?/1)
         |> Enum.max_by(&selectivity/1, fn -> nil end)
+        |> fold_case()
     end
   end
+
+  # Requirements are matched case-insensitively. Folding can only ever make
+  # the requirement weaker - a literal that was present in some casing is
+  # still present once both sides are folded - so it cannot exclude a pattern
+  # that would have matched, and it is what lets a class like [Bb] pin a
+  # character at all.
+  defp fold_case(nil), do: nil
+  defp fold_case({:all, literal}), do: {:all, String.downcase(literal)}
+
+  defp fold_case({:any, literals}),
+    do: {:any, literals |> Enum.map(&String.downcase/1) |> Enum.uniq()}
 
   defp viable?({:all, literal}), do: byte_size(literal) >= @min_all_length
   defp viable?({:any, []}), do: false
@@ -218,7 +241,14 @@ defmodule UAParser.Index do
     end
   end
 
-  defp scan(<<"[", rest::binary>>, run, best, anys), do: scan(skip_class(rest), <<>>, longer(run, best), anys)
+  defp scan(<<"[", rest::binary>>, run, best, anys) do
+    {class, remaining} = take_class(rest, <<"[">>)
+
+    case class_literal(class) do
+      {:ok, char} -> take_literal(<<char>>, remaining, run, best, anys)
+      :error -> scan(remaining, <<>>, longer(run, best), anys)
+    end
+  end
 
   defp scan(<<"(?:", rest::binary>>, run, best, anys), do: scan_group(rest, run, best, anys)
 
@@ -266,8 +296,9 @@ defmodule UAParser.Index do
       case branches(content) do
         # A literal from inside a group is never joined to the text around
         # it - we cannot prove where inside the group it sits - so it only
-        # competes as a candidate of its own.
-        {:one, literal} -> scan(after_group, <<>>, longer(flushed, literal), anys)
+        # competes as a candidate of its own. Any-sets found nested inside
+        # the group are still required by it, so they come up with it.
+        {:one, literal, nested} -> scan(after_group, <<>>, longer(flushed, literal), nested ++ anys)
         {:any, literals} -> scan(after_group, <<>>, flushed, [literals | anys])
         :unprovable -> scan(after_group, <<>>, flushed, anys)
       end
@@ -290,7 +321,7 @@ defmodule UAParser.Index do
   defp single_branch(content) do
     case scan(content, <<>>, <<>>, []) do
       :unprovable -> :unprovable
-      {best, _anys} -> {:one, best}
+      {best, anys} -> {:one, best, anys}
     end
   end
 
@@ -359,6 +390,36 @@ defmodule UAParser.Index do
   defp skip_class(<<"]", rest::binary>>), do: rest
   defp skip_class(<<_char, rest::binary>>), do: skip_class(rest)
   defp skip_class(<<>>), do: <<>>
+
+  # A class whose members all fold to the same character - [Bb], [gG] - picks
+  # that one character whatever the case, so it extends the run rather than
+  # breaking it. This is what makes `[Bb]ot` and `[Ss][Pp][Ii][Dd][Ee][Rr]`
+  # provable; without it the patterns built from them are the most expensive
+  # ones left running on every parse. Ranges, negation and shorthands stay
+  # unprovable.
+  defp class_literal(class) do
+    inner = binary_part(class, 1, byte_size(class) - 2)
+
+    with {:ok, members} <- class_members(inner, []),
+         [<<char>>] <- members |> Enum.map(&String.downcase/1) |> Enum.uniq() do
+      {:ok, char}
+    else
+      _other -> :error
+    end
+  end
+
+  defp class_members(<<>>, []), do: :error
+  defp class_members(<<>>, members), do: {:ok, members}
+  defp class_members(<<"^", _rest::binary>>, []), do: :error
+  defp class_members(<<"-", _rest::binary>>, _members), do: :error
+
+  defp class_members(<<"\\", escaped, rest::binary>>, members) when escaped in @escaped_literals,
+    do: class_members(rest, [<<escaped>> | members])
+
+  defp class_members(<<char, rest::binary>>, members) when char < 128,
+    do: class_members(rest, [<<char>> | members])
+
+  defp class_members(_other, _members), do: :error
 
   defp take_class(<<"\\", escaped, rest::binary>>, acc), do: take_class(rest, <<acc::binary, "\\", escaped>>)
   defp take_class(<<"]", rest::binary>>, acc), do: {<<acc::binary, "]">>, rest}
