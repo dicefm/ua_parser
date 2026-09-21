@@ -7,7 +7,7 @@ defmodule UAParser.Mixfile do
     [
       app: :ua_parser,
       version: "1.10.0",
-      elixir: "~> 1.13",
+      elixir: "~> 1.19",
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       package: package(),
