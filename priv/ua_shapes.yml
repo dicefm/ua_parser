@@ -1,0 +1,25 @@
+# EXPERIMENTAL - not part of the bundled patterns.
+#
+# A hand-authored tree of the highest-volume, most regular real-world
+# user-agent shapes (Chrome-family, Firefox, Safari), used by
+# UAParser.Experimental.TreeMatcher to compare a compile-time-generated
+# recursive matcher (no Regex) against the existing Index + Regex.run path.
+#
+# Branches are tried in order - first marker found wins - because several
+# Chromium-derived browsers (Edge, Opera, Samsung Internet, ...) also carry
+# a "Chrome/" token for web compatibility, so the more specific browser
+# must be checked before falling through to the generic Chrome branch.
+branches:
+  - family: Edge
+    marker: "Edg/"
+  - family: Opera
+    marker: "OPR/"
+  - family: Samsung Internet
+    marker: "SamsungBrowser/"
+  - family: Chrome
+    marker: "Chrome/"
+  - family: Firefox
+    marker: "Firefox/"
+  - family: Safari
+    marker: "Version/"
+    confirm: "Safari/"
