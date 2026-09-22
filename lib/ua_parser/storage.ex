@@ -10,7 +10,7 @@ defmodule UAParser.Storage do
   linear scan.
   """
 
-  alias UAParser.{Index, Processor}
+  alias UAParser.{Index, Processor, Requirements}
 
   Application.start(:yamerl)
 
@@ -24,16 +24,24 @@ defmodule UAParser.Storage do
   def load_table do
     patterns = read_from_yaml()
 
-    simple_put({patterns, build_indexes(patterns)})
+    simple_put({patterns, build_indexes(patterns, Requirements.bundled())})
 
     :ok
   end
 
-  defp build_indexes({user_agents, os, devices}) do
-    {Index.build(user_agents), Index.build(os), Index.build(devices)}
+  defp build_indexes({user_agents, os, devices}, {ua_reqs, os_reqs, device_reqs}) do
+    {Index.build(user_agents, ua_reqs), Index.build(os, os_reqs), Index.build(devices, device_reqs)}
   end
 
-  defp read_from_yaml do
+  @doc """
+  Reads and processes the bundled `patterns.yml` into the three pattern
+  lists, without touching `persistent_term`. Compiling each pattern's
+  regex is a runtime concern, tied to the exact OTP/PCRE build that will
+  run it - see `UAParser.Requirements` for the compile-time counterpart
+  that mines index requirements from the same file's regex sources.
+  """
+  @spec read_from_yaml() :: {term(), term(), term()}
+  def read_from_yaml do
     :ua_parser
     |> :code.priv_dir()
     |> Kernel.++(~c"/patterns.yml")

@@ -7,11 +7,19 @@ defmodule UAParser.Processor do
   @doc """
   Process a document into Elixir keyword lists and compiled patterns.
   """
-  def process(document) do
+  def process(document), do: document |> sources() |> compile()
+
+  @doc """
+  Processes a document into Elixir keyword lists, leaving `:regex` as the
+  source string YAML gives it rather than a compiled `Regex`. Used at
+  compile time to mine index requirements without compiling every regex on
+  the build machine - compiling stays a runtime concern, tied to the exact
+  OTP/PCRE build that will run it.
+  """
+  def sources(document) do
     document
     |> extract
     |> convert
-    |> compile
   end
 
   defp atom_key(key) do

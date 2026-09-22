@@ -3,8 +3,6 @@ defmodule UAParser.IndexTest do
 
   alias UAParser.{Index, Storage}
 
-  doctest UAParser.Index
-
   # A spread of real user agents plus the shapes that stress the index:
   # alternations, case-classed words, smart TVs, bots and junk.
   @user_agents [
@@ -59,10 +57,17 @@ defmodule UAParser.IndexTest do
     "\\/\\/ [] () {} weird escaping"
   ]
 
+  # The real, bundled patterns and the indexes Storage built for them from
+  # priv/requirements.exs - what UAParser.parse/1 actually uses.
   defp categories do
     {user_agents, os, devices} = Storage.list()
+    {ua_index, os_index, device_index} = Storage.indexes()
 
-    [{"user_agent", user_agents}, {"os", os}, {"device", devices}]
+    [
+      {"user_agent", user_agents, ua_index},
+      {"os", os, os_index},
+      {"device", devices, device_index}
+    ]
   end
 
   defp regex(group), do: Keyword.fetch!(group, :regex)
@@ -81,9 +86,7 @@ defmodule UAParser.IndexTest do
 
   describe "find/2" do
     test "returns exactly what a full linear scan returns, for every pattern list" do
-      for {name, groups} <- categories() do
-        index = Index.build(groups)
-
+      for {name, groups, index} <- categories() do
         for user_agent <- @user_agents do
           assert Index.find(index, user_agent) == linear_find(groups, user_agent),
                  "#{name} index disagreed with a linear scan for #{inspect(user_agent)}"
@@ -94,9 +97,7 @@ defmodule UAParser.IndexTest do
 
   describe "candidates/2" do
     test "never excludes a pattern that actually matches" do
-      for {name, groups} <- categories() do
-        index = Index.build(groups)
-
+      for {name, groups, index} <- categories() do
         for user_agent <- @user_agents do
           matching =
             groups
@@ -115,9 +116,8 @@ defmodule UAParser.IndexTest do
     end
 
     test "returns candidates in the pattern list's original order" do
-      {user_agents, _os, _devices} = Storage.list()
-      index = Index.build(user_agents)
-      candidates = Index.candidates(index, "Mozilla/5.0 (Linux; Android 14) Chrome/125.0.0.0 Mobile Safari/537.36")
+      {ua_index, _os_index, _device_index} = Storage.indexes()
+      candidates = Index.candidates(ua_index, "Mozilla/5.0 (Linux; Android 14) Chrome/125.0.0.0 Mobile Safari/537.36")
 
       assert candidates == Enum.sort(candidates)
       assert candidates == Enum.uniq(candidates)
@@ -125,11 +125,11 @@ defmodule UAParser.IndexTest do
 
     test "narrows the candidate set well below the full pattern list" do
       {user_agents, _os, _devices} = Storage.list()
-      index = Index.build(user_agents)
+      {ua_index, _os_index, _device_index} = Storage.indexes()
 
       candidates =
         Index.candidates(
-          index,
+          ua_index,
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
         )
 
@@ -137,105 +137,16 @@ defmodule UAParser.IndexTest do
     end
   end
 
-  describe "requirement/1" do
-    test "a plain literal is its own requirement" do
-      assert Index.requirement("ArcGIS Client Using WinInet") == {:all, "arcgis client using wininet"}
-    end
-
-    test "escaped metacharacters count as literal text" do
-      assert Index.requirement("arcgisearth\\/(\\d+)\\.(\\d+)") == {:all, "arcgisearth/"}
-    end
-
-    test "a quantified character cannot extend the run" do
-      assert Index.requirement("Colou?r/(\\d+)") == {:all, "colo"}
-    end
-
-    test "a mandatory group's content is mined" do
-      assert Index.requirement("(GeoEvent Server) (\\d+)") == {:all, "geoevent server"}
-      assert Index.requirement("(OperationsDashboard)-(?:Windows)-(\\d+)") == {:all, "operationsdashboard"}
-    end
-
-    test "a quantified group's content is not mined" do
-      assert Index.requirement("(?:GeoEvent Server)?SomeOtherThing") == {:all, "someotherthing"}
-    end
-
-    test "an alternation becomes an any-of requirement" do
-      assert {:any, literals} = Index.requirement("\\b(MobileIron|FireWeb|ANTGalio)/(\\d+)")
-      assert Enum.sort(literals) == ["antgalio", "fireweb", "mobileiron"]
-    end
-
-    test "an alternation with a branch that yields nothing is not provable" do
-      assert Index.requirement("(Spider|\\d+)/(\\d+)") == nil
-      assert Index.requirement("(?:Spider|)/(\\d+)") == nil
-    end
-
-    test "a top level alternation is not provable" do
-      assert Index.requirement("AspiegelBot|PetalBot") == nil
-    end
-
-    test "alternation inside a group leaves literals outside it usable" do
-      assert Index.requirement("(Collector|Explorer|Workforce)-Application/(\\d+)") == {:all, "-application/"}
-    end
-
-    test "lookarounds are never mined" do
-      assert Index.requirement("(?=Chromium)Safari") == {:all, "safari"}
-      assert Index.requirement("(?!Chromium)Safari") == {:all, "safari"}
-    end
-
-    test "a range or negated character class breaks the run" do
-      assert Index.requirement("HbbTV/\\d+\\.\\d+ \\(.{0,30}; ?([a-zA-Z]+)") == {:all, "hbbtv/"}
-      assert Index.requirement("Build[a-z]{1,10}Version") == {:all, "version"}
-      assert Index.requirement("Build[^x]Version") == {:all, "version"}
-    end
-
-    test "a class whose members all fold to one character extends the run" do
-      assert Index.requirement("[Ss]pider/(\\d+)") == {:all, "spider/"}
-      assert Index.requirement("[Ss][Pp][Ii][Dd][Ee][Rr]") == {:all, "spider"}
-      assert Index.requirement("Web[Cc]rawler") == {:all, "webcrawler"}
-    end
-
-    test "a quantified single-fold class still cannot extend the run" do
-      assert Index.requirement("Spider[Bb]?Crawler") == {:all, "crawler"}
-    end
-
-    test "an any-of set nested inside a mandatory group is still required" do
-      assert {:any, literals} =
-               Index.requirement("^.{0,200}?([A-Za-z0-9]{0,50}(?:[Aa]rchiver|[Bb]ot|[Ss]pider))/(\\d+)")
-
-      assert Enum.sort(literals) == ["archiver", "bot", "spider"]
-    end
-
-    test "a wildcard breaks the run" do
-      assert Index.requirement("Mozilla.{1,200}(Ddg)/(\\d+)") == {:all, "mozilla"}
-    end
-
-    test "a run shorter than the minimum is not worth indexing" do
-      assert Index.requirement("(\\d+)a(\\d+)") == nil
-    end
-
-    test "every bundled pattern yields a well formed requirement" do
-      for {_name, groups} <- categories(), group <- groups do
-        source = group |> regex() |> Regex.source()
-
-        assert Index.requirement(source) == nil or
-                 match?({:all, _literal}, Index.requirement(source)) or
-                 match?({:any, _literals}, Index.requirement(source))
-      end
-    end
-  end
-
-  describe "build/1" do
+  describe "build/2" do
     test "handles an empty pattern list" do
-      index = Index.build([])
+      index = Index.build([], [])
 
       assert Index.candidates(index, "anything") == []
       assert Index.find(index, "anything") == nil
     end
 
     test "leaves only a small tail of patterns that must always be tested" do
-      for {name, groups} <- categories() do
-        index = Index.build(groups)
-
+      for {name, groups, index} <- categories() do
         assert length(index.always) < div(length(groups), 4),
                "#{name}: #{length(index.always)} of #{length(groups)} patterns are unindexed"
       end
