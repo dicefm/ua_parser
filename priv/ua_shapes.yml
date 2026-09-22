@@ -258,3 +258,40 @@ os:
     # no version_min_parts here.
     - family: Linux
       version_after: "Linux"
+
+device:
+  # Device is the least regular of the three lists (633 patterns, mostly
+  # one-off vendor/model codes) - only the two shapes big enough to be
+  # worth it and safe enough to verify are covered here. In particular,
+  # "Mac" is real patterns.yml's fallback for anything containing
+  # "Mac OS" - but iPhone/iPad UAs also contain "like Mac OS X" for
+  # compatibility, so those must be checked first or a huge share of
+  # mobile Safari traffic would be misclassified as "Mac". Confirmed
+  # against real traffic: a naive "Mac OS" -> Mac rule alone was wrong
+  # for over a million requests, all of them iPhones.
+  #
+  #   marker  a single required substring, no version to extract
+  #   any_of  at least one of these substrings must be present
+  #   family/brand/model
+  #           fixed output - device shapes don't carry a version
+  branches:
+    # `(iPhone)(?:;| Simulator;)` in patterns.yml.
+    - family: iPhone
+      brand: Apple
+      model: iPhone
+      any_of: ["iPhone;", "iPhone Simulator;"]
+
+    # `(iPad)(?:;| Simulator;)` in patterns.yml. Must precede Mac below
+    # for the same reason as iPhone.
+    - family: iPad
+      brand: Apple
+      model: iPad
+      any_of: ["iPad;", "iPad Simulator;"]
+
+    # `Mac OS` in patterns.yml - a broad, late-in-the-list fallback.
+    # Safe here specifically because iPhone/iPad (the only real source
+    # of ambiguity found against real traffic) are checked first above.
+    - family: Mac
+      brand: Apple
+      model: Mac
+      marker: "Mac OS"
