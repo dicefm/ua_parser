@@ -1,25 +1,76 @@
 # EXPERIMENTAL - not part of the bundled patterns.
 #
 # A hand-authored tree of the highest-volume, most regular real-world
-# user-agent shapes (Chrome-family, Firefox, Safari), used by
-# UAParser.Experimental.TreeMatcher to compare a compile-time-generated
-# recursive matcher (no Regex) against the existing Index + Regex.run path.
+# user-agent shapes, used by UAParser.Experimental.TreeMatcher to compare a
+# compile-time-generated recursive matcher (no Regex) against the existing
+# Index + Regex.run path. Rules below are reverse-engineered from the real
+# winning patterns in patterns.yml for each shape, checked against the
+# 1000-UA real traffic sample.
 #
-# Branches are tried in order - first marker found wins - because several
-# Chromium-derived browsers (Edge, Opera, Samsung Internet, ...) also carry
-# a "Chrome/" token for web compatibility, so the more specific browser
-# must be checked before falling through to the generic Chrome branch.
+# Branches are tried in order - first one whose conditions are all
+# satisfied wins:
+#   all           every one of these substrings must be present
+#   any_of        at least one of these substrings must be present
+#   version_after version is the digit-and-dot run right after this marker
+#   version_min_parts
+#                 minimum dot-separated segments the version needs (e.g. a
+#                 real Chrome/OS version is always X.Y.Z.W - a "reduced"
+#                 UA reporting just "Chrome/125" isn't really claimed by
+#                 patterns.yml's Chrome pattern, so we shouldn't claim it
+#                 either; falls through to :no_match rather than guess)
+#
+# exclude_if_any short-circuits the whole matcher to :no_match if any of
+# these appear anywhere - modern crawlers (Googlebot, Bingbot, ...) spoof
+# a real Chrome/Safari UA shape for site-compatibility reasons, and this
+# tree has no visibility into the ~30 bot-detection patterns that need to
+# outrank them, so it defers to the general system instead of guessing.
+exclude_if_any:
+  - "bot"
+  - "crawler"
+  - "spider"
+
 branches:
   - family: Edge
-    marker: "Edg/"
+    all: ["Edg/"]
+    version_after: "Edg/"
+
   - family: Opera
-    marker: "OPR/"
+    all: ["OPR/"]
+    version_after: "OPR/"
+
   - family: Samsung Internet
-    marker: "SamsungBrowser/"
+    all: ["SamsungBrowser/"]
+    version_after: "SamsungBrowser/"
+
+  # Chrome on iOS reports its own version under "CriOS/", not "Chrome/".
+  - family: Chrome Mobile iOS
+    all: ["CriOS/"]
+    version_after: "CriOS/"
+
+  # `Chrome/(\d+)\.(\d+)\.(\d+)\.(\d+) Mobile(?:[ /]|$)` in patterns.yml -
+  # a full 4-part version followed by a " Mobile" token.
+  - family: Chrome Mobile
+    all: ["Chrome/", " Mobile"]
+    version_after: "Chrome/"
+    version_min_parts: 4
+
   - family: Chrome
-    marker: "Chrome/"
+    all: ["Chrome/"]
+    version_after: "Chrome/"
+    version_min_parts: 4
+
   - family: Firefox
-    marker: "Firefox/"
+    all: ["Firefox/"]
+    version_after: "Firefox/"
+
+  # `(iPod|iPhone|iPad).{1,200}Version/(\d+)\.(\d+)(?:\.(\d+)|).{1,200}[ +]Safari`
+  # in patterns.yml - a device token is what separates "Mobile Safari"
+  # from plain desktop "Safari" below.
+  - family: Mobile Safari
+    all: ["Version/", "Safari"]
+    any_of: ["iPhone", "iPad", "iPod"]
+    version_after: "Version/"
+
   - family: Safari
-    marker: "Version/"
-    confirm: "Safari/"
+    all: ["Version/", "Safari"]
+    version_after: "Version/"

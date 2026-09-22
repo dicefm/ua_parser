@@ -4,19 +4,26 @@ defmodule UAParser.Experimental.TreeMatcher do
 
   A prototype for a specific question: could a hand-authored document
   describing UA shapes (`priv/ua_shapes.yml`), compiled into a tree of
-  recursive Elixir functions, beat `UAParser.Index` + `Regex.run` for the
-  small set of high-volume, regular templates (Chrome-family, Firefox,
-  Safari) that make up the bulk of real traffic - with no regex engine
-  involved at all?
+  recursive Elixir functions, match `UAParser.Index` + `Regex.run`'s
+  results for the small set of high-volume, regular templates (Chrome
+  family, Firefox, Safari family) that make up the bulk of real traffic -
+  with no regex engine involved at all?
 
   `priv/ua_shapes.yml` lists browser "branches" in priority order (most
-  specific first, since Edge/Opera/Samsung Internet UAs also carry a
-  `Chrome/` token for compatibility). At compile time, this module reads
-  that document and generates one `try_branch/2` function clause per
-  branch, each doing a plain `:binary.match/2` for its marker and a
-  hand-written digit-run scan for the version - no `Regex.run` anywhere.
-  A miss recurses to the next branch by calling the next clause, which is
-  the literal "generate functions to be called recursively" idea.
+  specific first). Each branch declares which substrings must all be
+  present (`all`), which set at least one must come from (`any_of`), and
+  where to find the version (`version_after`, with an optional
+  `version_min_parts` - a "reduced" UA like `Chrome/125` isn't claimed by
+  patterns.yml's real Chrome pattern either, since it requires a full
+  X.Y.Z.W version, so this tree doesn't claim it either). A top-level
+  `exclude_if_any` short-circuits to `:no_match` for known spoofing risks
+  (bots that embed a real browser's tokens for compatibility).
+
+  At compile time, this module reads that document and generates one
+  `try_branch/2` function clause per branch; a miss recurses to the next
+  branch by calling the next clause - the literal "generate functions to
+  be called recursively" idea. `check_branch/2` (shared, not generated) is
+  what plain `:binary.match/2` calls do the actual checking.
 
   See `bench/tree_vs_regex.exs` for the head-to-head benchmark and
   correctness check against `UAParser.parse/1`.
@@ -25,38 +32,56 @@ defmodule UAParser.Experimental.TreeMatcher do
   @shapes_path Path.expand("../../../priv/ua_shapes.yml", __DIR__)
   @external_resource @shapes_path
 
-  branches =
+  document =
     @shapes_path
     |> String.to_charlist()
     |> :yamerl_constr.file([])
     |> hd()
-    |> hd()
+
+  fetch_str = fn kw, key ->
+    case List.keyfind(kw, key, 0) do
+      {_key, value} -> to_string(value)
+      nil -> nil
+    end
+  end
+
+  fetch_list = fn kw, key ->
+    case List.keyfind(kw, key, 0) do
+      {_key, values} -> Enum.map(values, &to_string/1)
+      nil -> []
+    end
+  end
+
+  fetch_int = fn kw, key, default ->
+    case List.keyfind(kw, key, 0) do
+      {_key, value} -> value
+      nil -> default
+    end
+  end
+
+  exclude_words = fetch_list.(document, ~c"exclude_if_any")
+
+  branches =
+    document
+    |> List.keyfind(~c"branches", 0)
     |> elem(1)
     |> Enum.map(fn branch ->
-      fetch = fn key -> branch |> List.keyfind(key, 0) |> elem(1) |> to_string() end
-
-      confirm =
-        case List.keyfind(branch, ~c"confirm", 0),
-          do: (
-            {_, v} -> to_string(v)
-            nil -> nil
-          )
-
-      {fetch.(~c"family"), fetch.(~c"marker"), confirm}
+      %{
+        family: fetch_str.(branch, ~c"family"),
+        all: fetch_list.(branch, ~c"all"),
+        any_of: fetch_list.(branch, ~c"any_of"),
+        version_after: fetch_str.(branch, ~c"version_after"),
+        min_parts: fetch_int.(branch, ~c"version_min_parts", 0)
+      }
     end)
 
-  for {{family, marker, confirm}, index} <- Enum.with_index(branches) do
-    defp try_branch(unquote(index), string) do
-      case :binary.match(string, unquote(marker)) do
-        {pos, len} ->
-          if unquote(confirm) == nil or :binary.match(string, unquote(confirm)) != :nomatch do
-            {unquote(family), extract_version(string, pos + len)}
-          else
-            try_branch(unquote(index + 1), string)
-          end
+  @exclude_words exclude_words
 
-        :nomatch ->
-          try_branch(unquote(index + 1), string)
+  for {branch, index} <- Enum.with_index(branches) do
+    defp try_branch(unquote(index), string) do
+      case check_branch(string, unquote(Macro.escape(branch))) do
+        {:ok, version} -> {unquote(branch.family), version}
+        :fail -> try_branch(unquote(index + 1), string)
       end
     end
   end
@@ -72,7 +97,27 @@ defmodule UAParser.Experimental.TreeMatcher do
   `UAParser.parse/1`, not build a full `UAParser.UA` struct.
   """
   @spec match(binary()) :: {binary(), binary()} | :no_match
-  def match(string), do: try_branch(0, string)
+  def match(string) do
+    if Enum.any?(@exclude_words, &contains?(String.downcase(string), &1)) do
+      :no_match
+    else
+      try_branch(0, string)
+    end
+  end
+
+  defp check_branch(string, %{all: all, any_of: any_of, version_after: marker, min_parts: min_parts}) do
+    with true <- Enum.all?(all, &contains?(string, &1)),
+         true <- any_of == [] or Enum.any?(any_of, &contains?(string, &1)),
+         {pos, len} <- :binary.match(string, marker),
+         version <- extract_version(string, pos + len),
+         true <- version_parts(version) >= min_parts do
+      {:ok, version}
+    else
+      _other -> :fail
+    end
+  end
+
+  defp contains?(string, substring), do: :binary.match(string, substring) != :nomatch
 
   defp extract_version(string, start) do
     version_run(binary_part(string, start, byte_size(string) - start), <<>>)
@@ -80,4 +125,7 @@ defmodule UAParser.Experimental.TreeMatcher do
 
   defp version_run(<<c, rest::binary>>, acc) when c in ?0..?9 or c == ?., do: version_run(rest, <<acc::binary, c>>)
   defp version_run(_rest, acc), do: acc
+
+  defp version_parts(<<>>), do: 0
+  defp version_parts(version), do: version |> String.split(".") |> length()
 end
