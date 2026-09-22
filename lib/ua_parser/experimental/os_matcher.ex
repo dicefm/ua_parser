@@ -47,6 +47,8 @@ defmodule UAParser.Experimental.OSMatcher do
       }
     end)
 
+  @all_needles branches |> Enum.map(& &1.version_after) |> Enum.uniq()
+
   for {branch, index} <- Enum.with_index(branches) do
     defp try_branch(unquote(index), string) do
       case check_branch(string, unquote(Macro.escape(branch))) do
@@ -59,21 +61,35 @@ defmodule UAParser.Experimental.OSMatcher do
   defp try_branch(_index, _string), do: :no_match
 
   @doc """
+  Compiles every marker this module searches for via
+  `:binary.compile_pattern/1` and stores the results in `:persistent_term`,
+  keyed by the literal string. Call once (e.g. from `UAParser.Application`)
+  before `match/1`. See `UAParser.Experimental.TreeMatcher.warm/0`.
+  """
+  @spec warm() :: :ok
+  def warm do
+    for needle <- @all_needles, do: :persistent_term.put({__MODULE__, needle}, :binary.compile_pattern(needle))
+    :ok
+  end
+
+  @doc """
   Matches `string` against the OS shape document, returning
   `{family, version}` or `:no_match`.
   """
   @spec match(binary()) :: {binary(), binary()} | :no_match
   def match(string), do: try_branch(0, string)
 
+  defp compiled(needle), do: :persistent_term.get({__MODULE__, needle})
+
   defp check_branch(string, %{version_after: marker, version_map: nil}) do
-    case :binary.match(string, marker) do
+    case :binary.match(string, compiled(marker)) do
       {pos, len} -> {:ok, extract_version(string, pos + len)}
       :nomatch -> :fail
     end
   end
 
   defp check_branch(string, %{version_after: marker, version_map: version_map}) do
-    with {pos, len} <- :binary.match(string, marker),
+    with {pos, len} <- :binary.match(string, compiled(marker)),
          raw <- extract_version(string, pos + len),
          {:ok, mapped} <- Map.fetch(version_map, raw) do
       {:ok, mapped}

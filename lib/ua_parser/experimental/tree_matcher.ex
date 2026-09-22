@@ -59,6 +59,17 @@ defmodule UAParser.Experimental.TreeMatcher do
 
   @exclude_words exclude_words
 
+  # Every distinct single-string substring this module searches for,
+  # across every branch's version_after/all/any_of. Compiled once by
+  # warm/0, keyed by the literal string itself. exclude_if_any is
+  # compiled separately, as one multi-pattern matcher (that's the whole
+  # point of it being a list: find any of several needles in one pass),
+  # keyed by :exclude_words instead of by its own content.
+  @all_needles branches
+               |> Enum.flat_map(&[[&1.version_after], &1.all, &1.any_of])
+               |> List.flatten()
+               |> Enum.uniq()
+
   for {branch, index} <- Enum.with_index(branches) do
     defp try_branch(unquote(index), string) do
       case check_branch(string, unquote(Macro.escape(branch))) do
@@ -72,6 +83,20 @@ defmodule UAParser.Experimental.TreeMatcher do
   defp try_branch(_index, _string), do: :no_match
 
   @doc """
+  Compiles every needle this module searches for via `:binary.compile_pattern/1`
+  and stores the results in `:persistent_term`, keyed by the literal string.
+  `:binary.compile_pattern/1`'s result is a reference - it cannot be a
+  compile-time literal (module attribute), so this is a runtime step. Call
+  once (e.g. from `UAParser.Application`) before `match/1`.
+  """
+  @spec warm() :: :ok
+  def warm do
+    for needle <- @all_needles, do: :persistent_term.put({__MODULE__, needle}, :binary.compile_pattern(needle))
+    :persistent_term.put({__MODULE__, :exclude_words}, :binary.compile_pattern(@exclude_words))
+    :ok
+  end
+
+  @doc """
   Matches `string` against the shape document, returning `{family, version}`
   or `:no_match`. `version` is the raw digit-and-dot run found after the
   matching marker (e.g. `"128.0.0.0"`), not split into major/minor/patch -
@@ -80,7 +105,7 @@ defmodule UAParser.Experimental.TreeMatcher do
   """
   @spec match(binary()) :: {binary(), binary()} | :no_match
   def match(string) do
-    if :binary.match(string, @exclude_words) != :nomatch do
+    if :binary.match(string, compiled(:exclude_words)) != :nomatch do
       :no_match
     else
       try_branch(0, string)
@@ -94,9 +119,9 @@ defmodule UAParser.Experimental.TreeMatcher do
   # case of "wrong branch, try the next one" without spending any extra
   # :binary.match calls on `all`/`any_of` first.
   defp check_branch(string, %{all: all, any_of: any_of, version_after: marker, min_parts: min_parts}) do
-    with {pos, len} <- :binary.match(string, marker),
-         true <- Enum.all?(all, &contains?(string, &1)),
-         true <- any_of == [] or Enum.any?(any_of, &contains?(string, &1)),
+    with {pos, len} <- :binary.match(string, compiled(marker)),
+         true <- Enum.all?(all, &hit?(string, &1)),
+         true <- any_of == [] or Enum.any?(any_of, &hit?(string, &1)),
          version <- extract_version(string, pos + len),
          true <- version_parts(version) >= min_parts do
       {:ok, version}
@@ -105,7 +130,9 @@ defmodule UAParser.Experimental.TreeMatcher do
     end
   end
 
-  defp contains?(string, substring), do: :binary.match(string, substring) != :nomatch
+  defp hit?(string, needle), do: :binary.match(string, compiled(needle)) != :nomatch
+
+  defp compiled(needle), do: :persistent_term.get({__MODULE__, needle})
 
   defp extract_version(string, start) do
     version_run(binary_part(string, start, byte_size(string) - start), <<>>)
