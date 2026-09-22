@@ -75,18 +75,56 @@ defmodule UAParser do
   """
   @spec parse(String.t() | nil) :: UAParser.UA.t()
   def parse(nil), do: parse("")
-  def parse(ua), do: Parser.parse(ua)
+  def parse(ua), do: Parser.parse(ua, Parser.domains())
 
   @doc """
-  Parses `ua` against a caller-supplied pattern list instead of the
-  bundled one - `pattern` is a `{user_agent, os, device}` tuple in the
-  same shape `UAParser.Storage.list/0` returns.
+  Parses `ua` against a caller-supplied pattern list, or with options
+  against the bundled one.
 
-  Useful for testing against a small, purpose-built pattern set. Always
-  scans each list linearly: the index described in the moduledoc only
-  applies to the bundled patterns, since it depends on requirements mined
-  from them ahead of time.
+  ## Args
+
+    * `ua` - the raw user-agent string
+    * `patterns` - a `{user_agent, os, device}` tuple in the same shape
+      `UAParser.Storage.list/0` returns. Useful for testing against a
+      small, purpose-built pattern set. Always scans each list linearly:
+      the index described in the moduledoc only applies to the bundled
+      patterns, since it depends on requirements mined from them ahead
+      of time.
+
+  Passing a keyword list instead of `patterns` parses against the
+  bundled patterns with:
+
+    * `:only` - which domains to resolve, any subset of `[:browser, :os,
+      :device]`. A domain left out comes back as its empty struct, the
+      same as when nothing matches. Defaults to all three.
+
+  ## Examples
+
+      iex> agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Chrome/125.0.0.0 Mobile Safari/537.36"
+      iex> parsed = UAParser.parse(agent, only: [:browser, :os])
+      iex> parsed.device
+      %UAParser.Device{}
+      iex> parsed.os.family
+      "iOS"
   """
-  @spec parse(String.t(), {list(), list(), list()}) :: UAParser.UA.t()
-  def parse(ua, pattern), do: Parser.parse(pattern, ua)
+  @spec parse(String.t() | nil, keyword() | {list(), list(), list()}) :: UAParser.UA.t()
+  def parse(nil, opts_or_patterns), do: parse("", opts_or_patterns)
+  def parse(ua, patterns) when is_tuple(patterns), do: Parser.parse_with_patterns(patterns, ua)
+  def parse(ua, opts) when is_list(opts), do: Parser.parse(ua, only(opts))
+
+  defp only(opts) do
+    domains = Parser.domains()
+
+    case Keyword.get(opts, :only, domains) do
+      selected when is_list(selected) ->
+        case selected -- domains do
+          [] ->
+            selected
+
+          invalid ->
+            raise ArgumentError,
+                  "invalid :only domain(s): #{inspect(invalid)}; expected a subset of #{inspect(domains)}"
+        end
+    end
+  end
 end

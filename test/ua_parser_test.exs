@@ -27,4 +27,24 @@ defmodule UAParserTest do
     assert ua.family == "Testing Pattern Skyfire"
     assert to_string(ua.version) == "2.0"
   end
+
+  describe "parse/2 with :only" do
+    test "resolves only the requested domains, others come back as their empty struct" do
+      ua = UAParser.parse(@user_agent, only: [:browser])
+
+      assert to_string(ua) == "Skyfire 2.0"
+      assert ua.os == %UAParser.OperatingSystem{}
+      assert ua.device == %UAParser.Device{}
+    end
+
+    test "defaults to every domain when :only is omitted" do
+      assert UAParser.parse(@user_agent, []) == UAParser.parse(@user_agent)
+    end
+
+    test "raises on an unknown domain" do
+      assert_raise ArgumentError, ~r/invalid :only domain/, fn ->
+        UAParser.parse(@user_agent, only: [:bogus])
+      end
+    end
+  end
 end
