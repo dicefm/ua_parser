@@ -56,11 +56,8 @@ end)
 # --- speed: index+regex vs tree, on the covered UAs only ---
 
 covered = Enum.filter(uas, &(TreeMatcher.match(&1) != :no_match))
-target_calls = 1_000_000
-outer = div(target_calls, length(covered))
-calls = outer * length(covered)
 
-IO.puts("\n=== speed (#{length(covered)} of #{length(uas)} UAs the tree covers, #{calls} calls each) ===\n")
+IO.puts("\n=== speed (#{length(covered)} of #{length(uas)} UAs the tree covers, one pass per iteration) ===\n")
 
 find_via_index = fn ua ->
   case Index.find(ua_index, ua) do
@@ -69,19 +66,15 @@ find_via_index = fn ua ->
   end
 end
 
-{index_us, _} =
-  :timer.tc(fn ->
-    for _ <- 1..outer, ua <- covered, do: find_via_index.(ua)
-  end)
-
-{tree_us, _} =
-  :timer.tc(fn ->
-    for _ <- 1..outer, ua <- covered, do: TreeMatcher.match(ua)
-  end)
-
-IO.puts("Index + Regex.run:  #{Float.round(index_us / calls, 4)} us/call  (#{calls} calls)")
-IO.puts("TreeMatcher:         #{Float.round(tree_us / calls, 4)} us/call  (#{calls} calls)")
-IO.puts("ratio (index/tree): #{Float.round(index_us / tree_us, 2)}x")
+Benchee.run(
+  %{
+    "Index + Regex.run" => fn -> Enum.each(covered, find_via_index) end,
+    "TreeMatcher" => fn -> Enum.each(covered, &TreeMatcher.match/1) end
+  },
+  time: 8,
+  warmup: 2,
+  memory_time: 2
+)
 
 # --- the catch: modern crawlers spoof these exact shapes ---
 #
