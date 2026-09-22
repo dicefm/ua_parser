@@ -52,6 +52,7 @@ defmodule UAParser.FastPath.Browser do
     end)
 
   @exclude_words exclude_words
+  @branches branches
   @all_needles branches
                |> Enum.flat_map(&[[&1.version_after], &1.all, &1.any_of, &1.none])
                |> List.flatten()
@@ -73,7 +74,14 @@ defmodule UAParser.FastPath.Browser do
   @spec warm() :: :ok
   def warm do
     Document.warm(__MODULE__, @all_needles)
-    Document.warm(__MODULE__, [@exclude_words])
+    Document.warm_group(__MODULE__, @exclude_words)
+
+    for %{any_of: any_of, none: none} <- @branches do
+      if any_of != [], do: Document.warm_group(__MODULE__, any_of)
+      if none != [], do: Document.warm_group(__MODULE__, none)
+    end
+
+    :ok
   end
 
   @doc """
@@ -82,7 +90,7 @@ defmodule UAParser.FastPath.Browser do
   """
   @spec match(binary()) :: UA.t() | :no_match
   def match(string) do
-    if :binary.match(string, Document.compiled(__MODULE__, @exclude_words)) != :nomatch do
+    if hit?(string, @exclude_words) do
       :no_match
     else
       try_branch(0, string)
@@ -94,12 +102,15 @@ defmodule UAParser.FastPath.Browser do
   # condition, and most branches fail here for a given string (their
   # marker just isn't in it) - so this is the fast path for the common
   # case of "wrong branch, try the next one" without spending any extra
-  # :binary.match calls on `all`/`any_of` first.
+  # :binary.match calls on `all`/`any_of` first. `any_of`/`none` are each
+  # checked with one combined-pattern match (compiled by `warm/0`) rather
+  # than one `:binary.match` per needle - some `none` lists run to several
+  # dozen entries.
   defp check_branch(string, %{all: all, any_of: any_of, none: none, version_after: marker, min_parts: min_parts}) do
     with {pos, len} <- :binary.match(string, Document.compiled(__MODULE__, marker)),
          true <- Enum.all?(all, &hit?(string, &1)),
-         true <- any_of == [] or Enum.any?(any_of, &hit?(string, &1)),
-         true <- Enum.all?(none, &(not hit?(string, &1))),
+         true <- any_of == [] or hit?(string, any_of),
+         true <- none == [] or not hit?(string, none),
          version <- extract_version(string, pos + len),
          true <- version_parts(version) >= min_parts do
       {:ok, version}
@@ -108,7 +119,7 @@ defmodule UAParser.FastPath.Browser do
     end
   end
 
-  defp hit?(string, needle), do: :binary.match(string, Document.compiled(__MODULE__, needle)) != :nomatch
+  defp hit?(string, needle), do: Document.hit?(__MODULE__, string, needle)
 
   defp extract_version(string, start) do
     version_run(binary_part(string, start, byte_size(string) - start), <<>>)

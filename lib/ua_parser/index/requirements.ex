@@ -22,8 +22,7 @@ defmodule UAParser.Index.Requirements do
 
   [user_agents, os, devices] =
     @patterns_path
-    |> String.to_charlist()
-    |> :yamerl_constr.file([])
+    |> Processor.load_yaml()
     |> Processor.sources()
 
   mine = fn groups ->

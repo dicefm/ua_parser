@@ -39,6 +39,9 @@ defmodule UAParser.RegexPath do
     |> match(string)
   end
 
+  # `groups` is unused here: `Index` keeps its own tuple copy of the same
+  # patterns (built once at boot) for O(1) `elem/2` lookup by position,
+  # rather than converting the list passed in on every call.
   defp search(_groups, %Index{} = index, string), do: Index.find(index, string)
 
   defp match(nil, _string), do: nil

@@ -34,21 +34,26 @@ defmodule UAParser.Storage do
     {Index.build(user_agents, ua_reqs), Index.build(os, os_reqs), Index.build(devices, device_reqs)}
   end
 
-  @doc """
-  Reads and processes the bundled `patterns.yml` into the three pattern
-  lists, without touching `persistent_term`. Compiling each pattern's
-  regex is a runtime concern, tied to the exact OTP/PCRE build that will
-  run it - see `UAParser.Index.Requirements` for the compile-time counterpart
-  that mines index requirements from the same file's regex sources.
-  """
-  @spec read_from_yaml() :: {term(), term(), term()}
-  def read_from_yaml do
+  # Reads and processes the bundled `patterns.yml` into the three pattern
+  # lists, without touching `persistent_term`. Compiling each pattern's
+  # regex is a runtime concern, tied to the exact OTP/PCRE build that will
+  # run it - see `UAParser.Index.Requirements` for the compile-time counterpart
+  # that mines index requirements from the same file's regex sources.
+  defp read_from_yaml do
     :ua_parser
     |> :code.priv_dir()
     |> Kernel.++(~c"/patterns.yml")
-    |> :yamerl_constr.file([])
+    |> Processor.load_yaml()
     |> Processor.process()
   end
+
+  @doc """
+  Returns everything stored: `{patterns, indexes}`, where `patterns` is
+  `{user_agent_patterns, os_patterns, device_patterns}` and `indexes` is
+  `{user_agent_index, os_index, device_index}`.
+  """
+  @spec get() :: {{term(), term(), term()}, {Index.t(), Index.t(), Index.t()}}
+  def get, do: simple_get()
 
   @doc """
   Returns a tuple containing all three pattern lists:
@@ -56,7 +61,7 @@ defmodule UAParser.Storage do
   """
   @spec list() :: {term(), term(), term()}
   def list do
-    {patterns, _indexes} = simple_get()
+    {patterns, _indexes} = get()
 
     patterns
   end
@@ -67,7 +72,7 @@ defmodule UAParser.Storage do
   """
   @spec indexes() :: {Index.t(), Index.t(), Index.t()}
   def indexes do
-    {_patterns, indexes} = simple_get()
+    {_patterns, indexes} = get()
 
     indexes
   end
@@ -82,7 +87,7 @@ defmodule UAParser.Storage do
   """
   @spec indexes_for(term()) :: {Index.t(), Index.t(), Index.t()} | nil
   def indexes_for(patterns) do
-    case simple_get() do
+    case get() do
       {^patterns, indexes} -> indexes
       _other -> nil
     end

@@ -18,9 +18,19 @@ defmodule UAParser.Parser do
   pattern set is scanned linearly. Both paths pick the same pattern: the
   first one in the list whose regex matches.
   """
-  def parse({ua_patterns, os_patterns, device_patterns} = patterns, user_agent) do
-    {ua_index, os_index, device_index} = indexes_for(patterns)
+  def parse(patterns, user_agent), do: run(user_agent, patterns, indexes_for(patterns))
 
+  @doc """
+  Parses `user_agent` against the bundled patterns, fetching the patterns
+  and their indexes from `UAParser.Storage` in a single lookup rather than
+  fetching the patterns and then looking their indexes up separately.
+  """
+  def parse_bundled(user_agent) do
+    {patterns, indexes} = Storage.get()
+    run(user_agent, patterns, indexes)
+  end
+
+  defp run(user_agent, {ua_patterns, os_patterns, device_patterns}, {ua_index, os_index, device_index}) do
     user_agent
     |> sanitize()
     |> parse_user_agent(ua_patterns, ua_index)

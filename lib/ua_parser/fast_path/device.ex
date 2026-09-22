@@ -65,5 +65,5 @@ defmodule UAParser.FastPath.Device do
   defp check_branch?(string, %{marker: nil, any_of: any_of}), do: Enum.any?(any_of, &hit?(string, &1))
   defp check_branch?(string, %{marker: marker}), do: hit?(string, marker)
 
-  defp hit?(string, needle), do: :binary.match(string, Document.compiled(__MODULE__, needle)) != :nomatch
+  defp hit?(string, needle), do: Document.hit?(__MODULE__, string, needle)
 end

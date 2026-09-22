@@ -10,6 +10,13 @@ defmodule UAParser.Processor do
   def process(document), do: document |> sources() |> compile()
 
   @doc """
+  Reads and parses a YAML file with yamerl, given its path.
+  """
+  @spec load_yaml(binary() | charlist()) :: term()
+  def load_yaml(path) when is_binary(path), do: path |> String.to_charlist() |> load_yaml()
+  def load_yaml(path), do: :yamerl_constr.file(path, [])
+
+  @doc """
   Processes a document into Elixir keyword lists, leaving `:regex` as the
   source string YAML gives it rather than a compiled `Regex`. Used at
   compile time to mine index requirements without compiling every regex on

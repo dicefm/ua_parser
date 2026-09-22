@@ -65,7 +65,7 @@ defmodule UAParser do
 
   """
 
-  alias UAParser.{Parser, Storage}
+  alias UAParser.Parser
 
   @doc """
   Parses `ua`, a user-agent string, into a `UAParser.UA` struct.
@@ -75,7 +75,7 @@ defmodule UAParser do
   """
   @spec parse(String.t() | nil) :: UAParser.UA.t()
   def parse(nil), do: parse("")
-  def parse(ua), do: parse(ua, default_pattern())
+  def parse(ua), do: Parser.parse_bundled(ua)
 
   @doc """
   Parses `ua` against a caller-supplied pattern list instead of the
@@ -89,6 +89,4 @@ defmodule UAParser do
   """
   @spec parse(String.t(), {list(), list(), list()}) :: UAParser.UA.t()
   def parse(ua, pattern), do: Parser.parse(pattern, ua)
-
-  defp default_pattern, do: Storage.list()
 end
