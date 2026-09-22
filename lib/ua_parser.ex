@@ -75,7 +75,7 @@ defmodule UAParser do
   """
   @spec parse(String.t() | nil) :: UAParser.UA.t()
   def parse(nil), do: parse("")
-  def parse(ua), do: Parser.parse_bundled(ua)
+  def parse(ua), do: Parser.parse(ua)
 
   @doc """
   Parses `ua` against a caller-supplied pattern list instead of the

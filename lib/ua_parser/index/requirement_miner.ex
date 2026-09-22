@@ -40,11 +40,8 @@ defmodule UAParser.Index.RequirementMiner do
   group is mandatory, and lookarounds are never mined at all. A class is
   mined only when every one of its members folds to the same character.
 
-  Literals are matched case-insensitively: they are folded when mined and
-  the subject is folded once per call by `UAParser.Index`. That costs one
-  pass over the string and makes requirements slightly less selective, but
-  it lets a class like `[Bb]` pin a character, which is worth far more
-  than it costs.
+  Literals are matched case-insensitively: they are folded when mined,
+  and `UAParser.Index` folds the subject once per call.
   """
 
   # A required literal has to be distinctive to be worth indexing; a one or

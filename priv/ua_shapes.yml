@@ -1,51 +1,23 @@
-# One document, three independent sections - `user_agent`, `os`, `device`
-# - because UAParser.Index already treats these as three independent
-# pattern lists (see UAParser.Parser: it calls Index.find/2 separately
-# for each). A branch falling through in one section only tries the next
-# branch in that same section, never a branch in another; keeping them
-# in one file is purely for convenience, not because the trees interact.
+# Three independent sections - user_agent, os, device - each compiled by
+# UAParser.TreePath.Browser/OS/Device into a tree of recursive Elixir
+# functions, no Regex involved. UAParser.Parser tries each tree first,
+# falling back to UAParser.Index + Regex.run for whatever it misses.
 #
-# Rules in every section are reverse-engineered from the real winning
-# pattern in patterns.yml for each shape, checked against a 1000-UA real
-# traffic sample - never guessed. See UAParser.FastPath.Browser,
-# UAParser.FastPath.OS and UAParser.FastPath.Device for how each section is
-# compiled into a tree of recursive Elixir functions, with no Regex
-# involved - UAParser.Parser tries each one first, falling back to
-# UAParser.Index + Regex.run for whatever it doesn't recognise.
+# Every rule here is patterns.yml's real winning rule for that shape,
+# verified against real traffic - never guessed.
 
 user_agent:
-  # Branches are tried in order - first one whose conditions are all
-  # satisfied wins. Many in-app browsers and mobile variants embed the
-  # same "Chrome/" or "Version/...Safari" tokens the generic branches key
-  # off, for compatibility - they must come first, or the generic branch
-  # would claim them.
+  # Branches are tried in order; the first fully-satisfied one wins.
+  # In-app/mobile browsers embedding a generic token (e.g. "Chrome/")
+  # must come before the generic branch they'd otherwise be claimed by.
   #
-  #   all           every one of these substrings must also be present
-  #                 (in addition to version_after itself)
-  #   any_of        at least one of these substrings must be present
-  #   none          none of these substrings may be present - the
-  #                 opposite of `all`, for branches broad enough to
-  #                 collide with a specific name checked earlier in the
-  #                 real pattern list (see the Safari branches below)
-  #   version_after version is the digit-and-dot run right after this
-  #                 marker; its mere presence is the branch's primary
-  #                 condition
-  #   version_min_parts
-  #                 minimum dot-separated segments the version needs
-  #                 (e.g. a real Chrome/OS version is always X.Y.Z.W - a
-  #                 "reduced" UA reporting just "Chrome/125" isn't really
-  #                 claimed by patterns.yml's Chrome pattern, so we
-  #                 shouldn't claim it either; falls through to
-  #                 :no_match rather than guess)
+  #   all/any_of/none   substrings that must/may/must not be present
+  #   version_after     version is the digit-and-dot run right after this marker
+  #   version_min_parts minimum version segments required, else :no_match
   #
-  # exclude_if_any short-circuits the whole matcher to :no_match if any
-  # of these appear anywhere - modern crawlers (Googlebot, Bingbot, ...)
-  # spoof a real Chrome/Safari UA shape for site-compatibility reasons,
-  # and this tree has no visibility into the ~30 bot-detection patterns
-  # that need to outrank them, so it defers to the general system
-  # instead of guessing. Listed in both common capitalizations rather
-  # than case-folding the whole subject string, which would allocate a
-  # full copy on every call.
+  # exclude_if_any short-circuits to :no_match for known bot names that
+  # spoof this shape - listed in both capitalizations to avoid folding
+  # the whole string.
   exclude_if_any:
     - "bot"
     - "Bot"
@@ -54,14 +26,6 @@ user_agent:
     - "Crawler"
     - "spider"
     - "Spider"
-
-  # NOTE: a "fast track" pre-scan was tried here - one multi-pattern
-  # :binary.match deciding whether any override branch could apply,
-  # jumping straight to the plain branches otherwise - and measured
-  # slower on real traffic (2.31x -> 1.46-1.85x), because a meaningful
-  # share of real UAs do carry an override marker (Edge, Firefox,
-  # Samsung Internet, ...), so the extra scan cost more often than it
-  # saved. Reverted; see git history on this file if revisiting.
 
   branches:
     # In-app / white-label browsers that brand an otherwise generic
@@ -181,18 +145,11 @@ user_agent:
     - family: Firefox
       version_after: "Firefox/"
 
-    # patterns.yml has a giant alternation of ~60 legacy/niche browser
-    # names (bingbot, Skyfire, Opera, Netscape, Konqueror, iCab, ...)
-    # checked well before the generic "Version/...Safari/" fallback - any
-    # of them can produce a UA that *also* has a Safari-shaped tail
-    # (e.g. "...Version/4.0 Safari/530.17 Skyfire/2.0"), which the real
-    # system correctly attributes to the specific name, not Safari. Found
-    # via the existing test suite, not the real-traffic sample (Skyfire
-    # is defunct and won't appear in current traffic - a reminder that
-    # "verified against real traffic" doesn't mean "verified against
-    # every shape patterns.yml can produce"). Duplicated across both
-    # branches below rather than shared via a YAML anchor, to not depend
-    # on yamerl supporting merge keys.
+    # patterns.yml checks ~60 legacy/niche browser names before the
+    # generic "Version/...Safari/" fallback - their UAs can also have a
+    # Safari-shaped tail (e.g. "...Version/4.0 Safari/530.17 Skyfire/2.0").
+    # Duplicated across both branches below rather than shared via a YAML
+    # anchor, to not depend on yamerl supporting merge keys.
     - family: Mobile Safari
       all: ["Safari"]
       any_of: ["iPhone", "iPad", "iPod"]
@@ -217,20 +174,13 @@ user_agent:
         Outlook-iOS-Android]
 
 os:
-  # Same idea, applied to OS identification. Android and Chrome OS UAs
-  # both also contain the literal substring "Linux" (as a kernel
-  # reference), so they must be checked before the generic Linux branch
-  # or it would win instead.
+  # Same idea, for OS identification. Android/Chrome OS UAs also contain
+  # the literal "Linux", so they must precede the generic Linux branch.
   #
-  #   version_after version is the digit run right after this marker;
-  #                 both "_" and "." are accepted as separators in the
-  #                 source (real UAs use underscores here, e.g.
-  #                 "Mac OS X 10_15_7"), always normalised to "." to
-  #                 match UAParser.Version's to_string/1 output
-  #   version_map   for OSes where the version in the UA string isn't
-  #                 the human-readable version at all - Windows NT build
-  #                 numbers are a hardcoded lookup table in patterns.yml
-  #                 (NT 6.1 -> "7", NT 10.0 -> "10", ...), not a formula
+  #   version_after version is the digit run after this marker; "_" and
+  #                 "." are both accepted as separators, normalised to "."
+  #   version_map   maps a raw version (e.g. a Windows NT build number)
+  #                 to the marketing version, for OSes where they differ
   branches:
     # `(Windows NT 10\.0)`, `(Win(?:dows NT |32NT\/)6\.1)` -> "7", etc.
     # in patterns.yml - a fixed table of NT build number -> marketing
@@ -286,20 +236,14 @@ os:
       version_after: "Linux"
 
 device:
-  # Device is the least regular of the three lists (633 patterns, mostly
-  # one-off vendor/model codes) - only the two shapes big enough to be
-  # worth it and safe enough to verify are covered here. In particular,
-  # "Mac" is real patterns.yml's fallback for anything containing
-  # "Mac OS" - but iPhone/iPad UAs also contain "like Mac OS X" for
-  # compatibility, so those must be checked first or a huge share of
-  # mobile Safari traffic would be misclassified as "Mac". Confirmed
-  # against real traffic: a naive "Mac OS" -> Mac rule alone was wrong
-  # for over a million requests, all of them iPhones.
+  # Only the two shapes worth indexing are covered here (patterns.yml's
+  # other 631 device patterns are mostly one-off vendor/model codes).
+  # iPhone/iPad must precede Mac below - their UAs also contain
+  # "like Mac OS X" for compatibility.
   #
   #   marker  a single required substring, no version to extract
   #   any_of  at least one of these substrings must be present
-  #   family/brand/model
-  #           fixed output - device shapes don't carry a version
+  #   family/brand/model  fixed output; device shapes carry no version
   branches:
     # `(iPhone)(?:;| Simulator;)` in patterns.yml.
     - family: iPhone

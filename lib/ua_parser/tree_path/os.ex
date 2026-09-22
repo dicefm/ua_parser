@@ -1,21 +1,12 @@
-defmodule UAParser.FastPath.OS do
+defmodule UAParser.TreePath.OS do
   @moduledoc """
-  Matches the `os` section of `priv/ua_shapes.yml`. See
-  `UAParser.FastPath.Browser`'s moduledoc for the shared design (compile
-  time, recursion, no regex) and `UAParser.FastPath`'s for why OS is its own
-  independent tree rather than sharing one with `Browser`.
-
-  A branch's version can come two ways:
-
-    * extracted directly (`version_after`) - most OSes report their own
-      version in the string, e.g. `Android 13`.
-    * looked up (`version_map`) - Windows NT build numbers aren't the
-      marketing version at all (`Windows NT 6.1` is "Windows 7"), so
-      patterns.yml hardcodes that mapping, and this does too.
+  Matches the `os` section of `priv/ua_shapes.yml` - see its comments
+  for the branch fields, and `UAParser.TreePath.Browser`'s moduledoc for
+  the shared compile-time design.
   """
 
-  alias UAParser.{FastPath, OperatingSystem}
-  alias UAParser.FastPath.Document
+  alias UAParser.{OperatingSystem, TreePath}
+  alias UAParser.TreePath.Document
 
   @shapes_path Path.expand("../../../priv/ua_shapes.yml", __DIR__)
   @external_resource @shapes_path
@@ -41,7 +32,7 @@ defmodule UAParser.FastPath.OS do
   for {branch, index} <- Enum.with_index(branches) do
     defp try_branch(unquote(index), string) do
       case check_branch(string, unquote(Macro.escape(branch))) do
-        {:ok, version} -> %OperatingSystem{family: unquote(branch.family), version: FastPath.version(version)}
+        {:ok, version} -> %OperatingSystem{family: unquote(branch.family), version: TreePath.version(version)}
         :fail -> try_branch(unquote(index + 1), string)
       end
     end

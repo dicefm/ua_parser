@@ -1,7 +1,7 @@
 defmodule UAParser.RegexPath do
   @moduledoc """
   Matches a user-agent string against a `patterns.yml` pattern list -
-  the fallback for whatever `UAParser.FastPath` doesn't recognise.
+  the fallback for whatever `UAParser.TreePath` doesn't recognise.
 
   When `index` is present (the bundled patterns), `UAParser.Index` narrows
   down candidates before running `Regex.run`; a caller-supplied pattern

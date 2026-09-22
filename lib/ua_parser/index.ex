@@ -1,32 +1,18 @@
 defmodule UAParser.Index do
   @moduledoc """
-  A precomputed index over one of the pattern lists, used to skip regexes
-  that cannot possibly match a given user-agent string.
+  A precomputed index over one of the pattern lists, skipping regexes
+  that cannot possibly match a given string.
 
-  Matching a user agent means finding the first pattern in an ordered list
-  whose regex matches. Done naively that runs every regex in the list until
-  one hits - 362 user-agent, 201 OS and 633 device patterns in the bundled
-  `patterns.yml`. Most of those regexes cannot match a given string at all,
-  and some are expensive to fail (large alternations, or lazy `.{0,200}?`
-  prefixes that backtrack heavily before giving up).
+  Each pattern is built from a *requirement* - a literal it must
+  contain, or an "any of" set from an alternation - mined from its regex
+  source by `UAParser.Index.RequirementMiner` at compile time (see
+  `UAParser.Index.Requirements`). All requirements go into one trie;
+  `candidates/2` walks the subject through it and returns only the
+  patterns whose requirement is satisfied, in original order, so
+  `find/2` matches exactly what a full linear scan would.
 
-  So each pattern is built from a *requirement* - a literal that any
-  matching string must contain, or an "any of" set from an alternation -
-  derived from its regex source by `UAParser.Index.RequirementMiner`. That
-  derivation happens once, at compile time (see `UAParser.Index.Requirements`);
-  this module only ever consumes its output, so the parse hot path never
-  runs a regex-source scanner.
-
-  All those literals go into one trie. `candidates/2` walks the subject
-  string through it and returns only the patterns whose requirement is
-  satisfied, in their original order, so `find/2` preserves exactly the
-  first-match-wins semantics of a full linear scan.
-
-  Literals are matched case-insensitively: they are folded by
-  `RequirementMiner` when mined, and the subject is folded once per call
-  here. That costs one pass over the string and makes requirements
-  slightly less selective, but it lets a class like `[Bb]` pin a
-  character, which is worth far more than it costs.
+  Literals are matched case-insensitively: folded by `RequirementMiner`
+  when mined, and the subject folded once per `candidates/2` call.
   """
 
   alias UAParser.Index.RequirementMiner

@@ -1,6 +1,6 @@
-defmodule UAParser.FastPath.Document do
+defmodule UAParser.TreePath.Document do
   @moduledoc """
-  Shared helpers for `UAParser.FastPath.Browser`/`OS`/`Device`: reading a
+  Shared helpers for `UAParser.TreePath.Browser`/`OS`/`Device`: reading a
   section of `priv/ua_shapes.yml`'s yamerl-parsed keyword lists at compile
   time, and compiling+caching `:binary.match/2` patterns at runtime.
 

@@ -1,19 +1,12 @@
-defmodule UAParser.FastPath.Device do
+defmodule UAParser.TreePath.Device do
   @moduledoc """
-  Matches the `device` section of `priv/ua_shapes.yml`. See
-  `UAParser.FastPath.Browser`'s moduledoc for the shared design.
-
-  Device is the least regular of the three pattern lists (633 patterns in
-  `patterns.yml`, mostly one-off vendor/model codes), so only the shapes
-  big enough to be worth it and safe enough to verify are covered here -
-  see `priv/ua_shapes.yml`'s comments for why "Mac" needed real traffic to
-  get right, not just its regex source. Device shapes don't carry a
-  version - the result is a fixed `{family, brand, model}` once a
-  branch's conditions are met.
+  Matches the `device` section of `priv/ua_shapes.yml` - see its
+  comments for the branch fields, and `UAParser.TreePath.Browser`'s
+  moduledoc for the shared compile-time design.
   """
 
   alias UAParser.Device, as: DeviceStruct
-  alias UAParser.FastPath.Document
+  alias UAParser.TreePath.Document
 
   @shapes_path Path.expand("../../../priv/ua_shapes.yml", __DIR__)
   @external_resource @shapes_path

@@ -1,30 +1,18 @@
-defmodule UAParser.FastPath.Browser do
+defmodule UAParser.TreePath.Browser do
   @moduledoc """
-  Matches the `user_agent` section of `priv/ua_shapes.yml`: browser
-  identification for the high-volume, regular templates (Chrome family,
-  Firefox, Safari family, and the in-app/white-label browsers that brand
-  them). See `UAParser.FastPath`'s moduledoc for why this exists and how it
-  fits with `UAParser.Index`.
+  Matches the `user_agent` section of `priv/ua_shapes.yml` - browser
+  identification for the high-volume shapes (Chrome, Firefox and Safari
+  families, and the in-app browsers that brand them). See
+  `priv/ua_shapes.yml` for the branch fields, and `UAParser.TreePath`'s
+  moduledoc for why this exists.
 
-  Branches are tried in priority order - most specific first, since many
-  in-app browsers and mobile variants embed the same tokens the generic
-  branches key off, for compatibility. Each branch declares which
-  substrings must all be present (`all`), which set at least one must
-  come from (`any_of`), and where to find the version (`version_after`,
-  with an optional `version_min_parts` - a "reduced" UA like `Chrome/125`
-  isn't claimed by patterns.yml's real Chrome pattern either, since it
-  requires a fuller version, so this doesn't claim it either). A
-  top-level `exclude_if_any` defers to `:no_match` for known spoofing
-  risks (bots that embed a real browser's tokens for compatibility).
-
-  At compile time, this module reads the document and generates one
-  `try_branch/2` function clause per branch; a miss recurses to the next
-  branch by calling the next clause. No `Regex.run` anywhere in the
-  matching path.
+  At compile time, generates one `try_branch/2` clause per branch; a
+  miss recurses to the next. No `Regex.run` anywhere in the matching
+  path.
   """
 
-  alias UAParser.{FastPath, UA}
-  alias UAParser.FastPath.Document
+  alias UAParser.{TreePath, UA}
+  alias UAParser.TreePath.Document
 
   @shapes_path Path.expand("../../../priv/ua_shapes.yml", __DIR__)
   @external_resource @shapes_path
@@ -61,7 +49,7 @@ defmodule UAParser.FastPath.Browser do
   for {branch, index} <- Enum.with_index(branches) do
     defp try_branch(unquote(index), string) do
       case check_branch(string, unquote(Macro.escape(branch))) do
-        {:ok, version} -> %UA{family: unquote(branch.family), version: FastPath.version(version)}
+        {:ok, version} -> %UA{family: unquote(branch.family), version: TreePath.version(version)}
         :fail -> try_branch(unquote(index + 1), string)
       end
     end
