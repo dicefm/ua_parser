@@ -2,14 +2,13 @@ defmodule UAParser.Parser do
   @moduledoc """
   Handle parsing the user-agent string.
 
-  For the bundled patterns, `UAParser.FastPath` tries a small set of
-  common, regex-free shapes first; anything it doesn't recognise falls
-  back to `UAParser.Index` (or a linear scan, for a caller-supplied
-  pattern list) - both paths pick the same pattern patterns.yml would.
+  Each of browser/OS/device is resolved in two layers: `UAParser.FastPath`
+  is tried first - a small set of common, regex-free shapes covering most
+  real traffic - and `UAParser.RegexPath` is the fallback for whatever it
+  doesn't recognise, picking the same pattern `patterns.yml` would.
   """
 
-  alias UAParser.{FastPath, Index, Storage}
-  alias UAParser.Parsers.{Device, OperatingSystem, UA}
+  alias UAParser.{FastPath, RegexPath, Storage}
 
   @doc """
   Parse a user-agent string given a set of patterns.
@@ -36,74 +35,35 @@ defmodule UAParser.Parser do
     end
   end
 
-  defp find_and_parse(patterns, index, user_agent, module) do
-    patterns
-    |> search(index, user_agent)
-    |> module.parse
-  end
-
-  defp match(nil, _string), do: nil
-
-  defp match(group, string) do
-    match =
-      group
-      |> Keyword.fetch!(:regex)
-      |> Regex.run(string)
-
-    {group, match}
+  defp parse_user_agent(user_agent, patterns, index) do
+    ua = try_fast_path(index, FastPath.Browser, user_agent, fn -> RegexPath.ua(patterns, index, user_agent) end)
+    {user_agent, ua}
   end
 
   defp parse_device({user_agent, acc}, patterns, index) do
     device =
-      shape_or_fallback(index, FastPath.Device, user_agent, fn ->
-        find_and_parse(patterns, index, user_agent, Device)
-      end)
+      try_fast_path(index, FastPath.Device, user_agent, fn -> RegexPath.device(patterns, index, user_agent) end)
 
     {user_agent, Map.put(acc, :device, device)}
   end
 
   defp parse_os({user_agent, acc}, patterns, index) do
-    os =
-      shape_or_fallback(index, FastPath.OS, user_agent, fn ->
-        find_and_parse(patterns, index, user_agent, OperatingSystem)
-      end)
-
+    os = try_fast_path(index, FastPath.OS, user_agent, fn -> RegexPath.os(patterns, index, user_agent) end)
     Map.put(acc, :os, os)
-  end
-
-  defp parse_user_agent(user_agent, patterns, index) do
-    ua =
-      shape_or_fallback(index, FastPath.Browser, user_agent, fn ->
-        find_and_parse(patterns, index, user_agent, UA)
-      end)
-
-    {user_agent, ua}
   end
 
   # FastPath only applies to the bundled patterns (index present - a
   # caller-supplied pattern list gets nil, same as UAParser.Index does),
   # since every shape is grounded in the bundled patterns.yml's specific
   # regexes, not whatever a caller happens to pass in.
-  defp shape_or_fallback(nil, _shape, _user_agent, fallback), do: fallback.()
+  defp try_fast_path(nil, _matcher, _user_agent, regex_path), do: regex_path.()
 
-  defp shape_or_fallback(_index, shape, user_agent, fallback) do
-    case shape.match(user_agent) do
-      :no_match -> fallback.()
+  defp try_fast_path(_index, matcher, user_agent, regex_path) do
+    case matcher.match(user_agent) do
+      :no_match -> regex_path.()
       result -> result
     end
   end
 
   defp sanitize(user_agent), do: String.trim(user_agent)
-
-  defp search(groups, nil, string) do
-    groups
-    |> Enum.find(fn group ->
-      group
-      |> Keyword.fetch!(:regex)
-      |> Regex.match?(string)
-    end)
-    |> match(string)
-  end
-
-  defp search(_groups, %Index{} = index, string), do: Index.find(index, string)
 end
