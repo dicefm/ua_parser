@@ -58,6 +58,28 @@ branches:
     version_after: "Electron/"
     version_min_parts: 3
 
+  # No "Mozilla/5.0" prefix at all - patterns.yml's real rule is a giant
+  # bot-name alternation this app's name happens to be listed in, with
+  # an optional version. `(?:[ /]v?(\d+)(?:\.(\d+)(?:\.(\d+)|)|)|)`.
+  - family: WhatsApp
+    version_after: "WhatsApp/"
+
+  # `Mozilla.{1,200}Android.{1,200}(GSA)/...` and
+  # `(iPod|iPhone|iPad).{1,200}GSA/...` in patterns.yml - both map to
+  # "Google" regardless of platform, so one marker covers both.
+  - family: Google
+    version_after: "GSA/"
+
+  # `(FxiOS)/(\d+)\.(\d+)(\.(\d+)|)(\.(\d+)|)` in patterns.yml.
+  - family: Firefox iOS
+    version_after: "FxiOS/"
+
+  # `Mozilla.{1,200}Mobile.{1,100}(Instagram).(\d+)\.(\d+)\.(\d+)` in
+  # patterns.yml - note the space, not a slash, before the version.
+  - family: Instagram
+    all: ["Mobile"]
+    version_after: "Instagram "
+
   - family: Yandex Browser
     version_after: "YaBrowser/"
     version_min_parts: 3
