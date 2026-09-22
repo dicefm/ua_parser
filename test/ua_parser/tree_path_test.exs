@@ -93,6 +93,16 @@ defmodule UAParser.TreePathTest do
 
       assert TreePath.browser(ua) == :no_match
     end
+
+    test "Go-http-client, real production traffic" do
+      assert %UA{family: "Go-http-client", version: version} = TreePath.browser("Go-http-client/2.0")
+      assert to_string(version) == "2.0"
+    end
+
+    test "axios, real production traffic" do
+      assert %UA{family: "axios", version: version} = TreePath.browser("axios/1.13.2")
+      assert to_string(version) == "1.13.2"
+    end
   end
 
   describe "device/1" do

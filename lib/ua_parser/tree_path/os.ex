@@ -12,17 +12,16 @@ defmodule UAParser.TreePath.OS do
   @external_resource @shapes_path
 
   document = Document.section(@shapes_path, :os)
-  fetch_str = &Document.fetch_str/2
+  fetch_str! = &Document.fetch_str!/2
   fetch_map = &Document.fetch_map/2
 
   branches =
     document
-    |> List.keyfind(~c"branches", 0)
-    |> elem(1)
+    |> Document.branches()
     |> Enum.map(fn branch ->
       %{
-        family: fetch_str.(branch, ~c"family"),
-        version_after: fetch_str.(branch, ~c"version_after"),
+        family: fetch_str!.(branch, ~c"family"),
+        version_after: fetch_str!.(branch, ~c"version_after"),
         version_map: fetch_map.(branch, ~c"version_map")
       }
     end)

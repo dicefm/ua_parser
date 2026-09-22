@@ -1,3 +1,11 @@
+defmodule UAParser.TreePath.InvalidShapeError do
+  @moduledoc """
+  Raised at compile time when `priv/ua_shapes.yml` doesn't have the
+  shape `UAParser.TreePath.Document` and its callers expect.
+  """
+  defexception message: "invalid ua_shapes.yml"
+end
+
 defmodule UAParser.TreePath.Document do
   @moduledoc """
   Shared helpers for `UAParser.TreePath.Browser`/`OS`/`Device`: reading a
@@ -13,19 +21,56 @@ defmodule UAParser.TreePath.Document do
   """
 
   alias UAParser.Processor
+  alias UAParser.TreePath.InvalidShapeError
 
-  @doc "Reads `path` and returns the keyword list under `section` (an atom)."
+  @doc """
+  Reads `path` and returns the keyword list under `section` (an atom).
+
+  Raises `UAParser.TreePath.InvalidShapeError` if `path` doesn't parse to
+  one YAML document, or that document has no `section` key - a malformed
+  `priv/ua_shapes.yml` should fail loudly, at compile time, with a
+  message that says what's wrong, not crash deep inside `elem/2`.
+  """
   @spec section(binary(), atom()) :: keyword()
   def section(path, section) do
-    path
-    |> Processor.load_yaml()
-    |> hd()
-    |> List.keyfind(Atom.to_charlist(section), 0)
-    |> elem(1)
+    case Processor.load_yaml(path) do
+      [document | _] ->
+        case List.keyfind(document, Atom.to_charlist(section), 0) do
+          {_key, value} -> value
+          nil -> raise InvalidShapeError, "#{path} is missing the top-level \"#{section}\" section"
+        end
+
+      _other ->
+        raise InvalidShapeError, "#{path} is empty or not a single YAML document"
+    end
+  end
+
+  @doc """
+  Returns the `branches` list under `document` (as returned by `section/2`).
+
+  Raises `UAParser.TreePath.InvalidShapeError` if `branches` is missing
+  or isn't a list.
+  """
+  @spec branches(keyword()) :: [keyword()]
+  def branches(document) do
+    case List.keyfind(document, ~c"branches", 0) do
+      {_key, branches} when is_list(branches) -> branches
+      {_key, other} -> raise InvalidShapeError, "expected \"branches\" to be a list, got: #{inspect(other)}"
+      nil -> raise InvalidShapeError, "missing \"branches\" key"
+    end
   end
 
   @spec fetch_str(keyword(), charlist()) :: binary() | nil
   def fetch_str(kw, key), do: fetch(kw, key, nil, &to_string/1)
+
+  @doc "Like `fetch_str/2`, but raises `UAParser.TreePath.InvalidShapeError` if `key` is missing."
+  @spec fetch_str!(keyword(), charlist()) :: binary()
+  def fetch_str!(kw, key) do
+    case fetch_str(kw, key) do
+      nil -> raise InvalidShapeError, "missing required \"#{key}\" in branch: #{inspect(kw)}"
+      value -> value
+    end
+  end
 
   @spec fetch_list(keyword(), charlist()) :: [binary()]
   def fetch_list(kw, key), do: fetch(kw, key, [], fn values -> Enum.map(values, &to_string/1) end)

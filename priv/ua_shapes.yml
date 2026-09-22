@@ -86,6 +86,15 @@ user_agent:
     - family: DuckDuckGo
       version_after: "Ddg/"
 
+    # patterns.yml: both share one alternation rule,
+    # `(...|Go-http-client|...|axios|...) (\d+)...`, along with several
+    # other HTTP client libraries not covered here.
+    - family: Go-http-client
+      version_after: "Go-http-client/"
+
+    - family: axios
+      version_after: "axios/"
+
     # patterns.yml: `(EdgiOS|EdgA)/...` -> "Edge Mobile", checked before
     # the desktop `Edg/` branch - neither contains the literal "Edg/"
     # substring (no slash right after "Edg"), so order between them

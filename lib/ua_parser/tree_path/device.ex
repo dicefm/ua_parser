@@ -6,26 +6,33 @@ defmodule UAParser.TreePath.Device do
   """
 
   alias UAParser.Device, as: DeviceStruct
-  alias UAParser.TreePath.Document
+  alias UAParser.TreePath.{Document, InvalidShapeError}
 
   @shapes_path Path.expand("../../../priv/ua_shapes.yml", __DIR__)
   @external_resource @shapes_path
 
   document = Document.section(@shapes_path, :device)
   fetch_str = &Document.fetch_str/2
+  fetch_str! = &Document.fetch_str!/2
   fetch_list = &Document.fetch_list/2
 
   branches =
     document
-    |> List.keyfind(~c"branches", 0)
-    |> elem(1)
+    |> Document.branches()
     |> Enum.map(fn branch ->
+      marker = fetch_str.(branch, ~c"marker")
+      any_of = fetch_list.(branch, ~c"any_of")
+
+      if is_nil(marker) and any_of == [] do
+        raise InvalidShapeError, "branch needs \"marker\" or \"any_of\": #{inspect(branch)}"
+      end
+
       %{
-        family: fetch_str.(branch, ~c"family"),
-        brand: fetch_str.(branch, ~c"brand"),
-        model: fetch_str.(branch, ~c"model"),
-        marker: fetch_str.(branch, ~c"marker"),
-        any_of: fetch_list.(branch, ~c"any_of")
+        family: fetch_str!.(branch, ~c"family"),
+        brand: fetch_str!.(branch, ~c"brand"),
+        model: fetch_str!.(branch, ~c"model"),
+        marker: marker,
+        any_of: any_of
       }
     end)
 

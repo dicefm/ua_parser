@@ -18,7 +18,7 @@ defmodule UAParser.TreePath.Browser do
   @external_resource @shapes_path
 
   document = Document.section(@shapes_path, :user_agent)
-  fetch_str = &Document.fetch_str/2
+  fetch_str! = &Document.fetch_str!/2
   fetch_list = &Document.fetch_list/2
   fetch_int = &Document.fetch_int/3
 
@@ -26,15 +26,14 @@ defmodule UAParser.TreePath.Browser do
 
   branches =
     document
-    |> List.keyfind(~c"branches", 0)
-    |> elem(1)
+    |> Document.branches()
     |> Enum.map(fn branch ->
       %{
-        family: fetch_str.(branch, ~c"family"),
+        family: fetch_str!.(branch, ~c"family"),
         all: fetch_list.(branch, ~c"all"),
         any_of: fetch_list.(branch, ~c"any_of"),
         none: fetch_list.(branch, ~c"none"),
-        version_after: fetch_str.(branch, ~c"version_after"),
+        version_after: fetch_str!.(branch, ~c"version_after"),
         min_parts: fetch_int.(branch, ~c"version_min_parts", 0)
       }
     end)
