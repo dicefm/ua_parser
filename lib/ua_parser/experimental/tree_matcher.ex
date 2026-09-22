@@ -31,35 +31,15 @@ defmodule UAParser.Experimental.TreeMatcher do
   correctness check against `UAParser.parse/1`.
   """
 
+  alias UAParser.Experimental.ShapeDocument
+
   @shapes_path Path.expand("../../../priv/ua_shapes.yml", __DIR__)
   @external_resource @shapes_path
 
-  document =
-    @shapes_path
-    |> String.to_charlist()
-    |> :yamerl_constr.file([])
-    |> hd()
-
-  fetch_str = fn kw, key ->
-    case List.keyfind(kw, key, 0) do
-      {_key, value} -> to_string(value)
-      nil -> nil
-    end
-  end
-
-  fetch_list = fn kw, key ->
-    case List.keyfind(kw, key, 0) do
-      {_key, values} -> Enum.map(values, &to_string/1)
-      nil -> []
-    end
-  end
-
-  fetch_int = fn kw, key, default ->
-    case List.keyfind(kw, key, 0) do
-      {_key, value} -> value
-      nil -> default
-    end
-  end
+  document = ShapeDocument.section(@shapes_path, :user_agent)
+  fetch_str = &ShapeDocument.fetch_str/2
+  fetch_list = &ShapeDocument.fetch_list/2
+  fetch_int = &ShapeDocument.fetch_int/3
 
   exclude_words = fetch_list.(document, ~c"exclude_if_any")
 

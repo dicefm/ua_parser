@@ -1,173 +1,260 @@
 # EXPERIMENTAL - not part of the bundled patterns.
 #
-# A hand-authored tree of the highest-volume, most regular real-world
-# user-agent shapes, used by UAParser.Experimental.TreeMatcher to compare a
-# compile-time-generated recursive matcher (no Regex) against the existing
-# Index + Regex.run path. Rules below are reverse-engineered from the real
-# winning patterns in patterns.yml for each shape, checked against a
-# 1000-UA real traffic sample.
+# One document, two independent sections - `user_agent` (browser
+# identification) and `os` - because UAParser.Index already treats these
+# as two completely independent pattern lists (see UAParser.Parser: it
+# calls Index.find/2 separately for each). A browser branch falling
+# through only tries the next browser branch, never an OS one; keeping
+# them in one file is purely for convenience, not because the two trees
+# interact.
 #
-# Branches are tried in order - first one whose conditions are all
-# satisfied wins. Many in-app browsers and mobile variants embed the same
-# "Chrome/" or "Version/...Safari" tokens the generic branches key off, for
-# compatibility - they must come first, or the generic branch would claim
-# them.
-#
-#   all           every one of these substrings must also be present
-#                 (in addition to version_after itself)
-#   any_of        at least one of these substrings must be present
-#   version_after version is the digit-and-dot run right after this marker;
-#                 its mere presence is the branch's primary condition
-#   version_min_parts
-#                 minimum dot-separated segments the version needs (e.g. a
-#                 real Chrome/OS version is always X.Y.Z.W - a "reduced"
-#                 UA reporting just "Chrome/125" isn't really claimed by
-#                 patterns.yml's Chrome pattern, so we shouldn't claim it
-#                 either; falls through to :no_match rather than guess)
-#
-# exclude_if_any short-circuits the whole matcher to :no_match if any of
-# these appear anywhere - modern crawlers (Googlebot, Bingbot, ...) spoof
-# a real Chrome/Safari UA shape for site-compatibility reasons, and this
-# tree has no visibility into the ~30 bot-detection patterns that need to
-# outrank them, so it defers to the general system instead of guessing.
-# Listed in both common capitalizations rather than case-folding the
-# whole subject string, which would allocate a full copy on every call.
-exclude_if_any:
-  - "bot"
-  - "Bot"
-  - "BOT"
-  - "crawler"
-  - "Crawler"
-  - "spider"
-  - "Spider"
+# Rules in both sections are reverse-engineered from the real winning
+# pattern in patterns.yml for each shape, checked against a 1000-UA real
+# traffic sample - never guessed. See UAParser.Experimental.TreeMatcher
+# and UAParser.Experimental.OSMatcher for how each section is compiled
+# into a tree of recursive Elixir functions, with no Regex involved.
 
-# NOTE: a "fast track" pre-scan was tried here - one multi-pattern
-# :binary.match deciding whether any override branch could apply, jumping
-# straight to the plain branches otherwise - and measured slower on real
-# traffic (2.31x -> 1.46-1.85x), because a meaningful share of real UAs
-# do carry an override marker (Edge, Firefox, Samsung Internet, ...), so
-# the extra scan cost more often than it saved. Reverted; see git history
-# on this file if revisiting.
+user_agent:
+  # Branches are tried in order - first one whose conditions are all
+  # satisfied wins. Many in-app browsers and mobile variants embed the
+  # same "Chrome/" or "Version/...Safari" tokens the generic branches key
+  # off, for compatibility - they must come first, or the generic branch
+  # would claim them.
+  #
+  #   all           every one of these substrings must also be present
+  #                 (in addition to version_after itself)
+  #   any_of        at least one of these substrings must be present
+  #   version_after version is the digit-and-dot run right after this
+  #                 marker; its mere presence is the branch's primary
+  #                 condition
+  #   version_min_parts
+  #                 minimum dot-separated segments the version needs
+  #                 (e.g. a real Chrome/OS version is always X.Y.Z.W - a
+  #                 "reduced" UA reporting just "Chrome/125" isn't really
+  #                 claimed by patterns.yml's Chrome pattern, so we
+  #                 shouldn't claim it either; falls through to
+  #                 :no_match rather than guess)
+  #
+  # exclude_if_any short-circuits the whole matcher to :no_match if any
+  # of these appear anywhere - modern crawlers (Googlebot, Bingbot, ...)
+  # spoof a real Chrome/Safari UA shape for site-compatibility reasons,
+  # and this tree has no visibility into the ~30 bot-detection patterns
+  # that need to outrank them, so it defers to the general system
+  # instead of guessing. Listed in both common capitalizations rather
+  # than case-folding the whole subject string, which would allocate a
+  # full copy on every call.
+  exclude_if_any:
+    - "bot"
+    - "Bot"
+    - "BOT"
+    - "crawler"
+    - "Crawler"
+    - "spider"
+    - "Spider"
 
-branches:
-  # In-app / white-label browsers that brand an otherwise generic
-  # Chrome- or Safari-shaped UA with their own token. All must be checked
-  # before the generic branches below, or the generic branch would win.
+  # NOTE: a "fast track" pre-scan was tried here - one multi-pattern
+  # :binary.match deciding whether any override branch could apply,
+  # jumping straight to the plain branches otherwise - and measured
+  # slower on real traffic (2.31x -> 1.46-1.85x), because a meaningful
+  # share of real UAs do carry an override marker (Edge, Firefox,
+  # Samsung Internet, ...), so the extra scan cost more often than it
+  # saved. Reverted; see git history on this file if revisiting.
 
-  - family: Electron
-    version_after: "Electron/"
-    version_min_parts: 3
+  branches:
+    # In-app / white-label browsers that brand an otherwise generic
+    # Chrome- or Safari-shaped UA with their own token. All must be
+    # checked before the generic branches below, or the generic branch
+    # would win.
 
-  # No "Mozilla/5.0" prefix at all - patterns.yml's real rule is a giant
-  # bot-name alternation this app's name happens to be listed in, with
-  # an optional version. `(?:[ /]v?(\d+)(?:\.(\d+)(?:\.(\d+)|)|)|)`.
-  - family: WhatsApp
-    version_after: "WhatsApp/"
+    - family: Electron
+      version_after: "Electron/"
+      version_min_parts: 3
 
-  # `Mozilla.{1,200}Android.{1,200}(GSA)/...` and
-  # `(iPod|iPhone|iPad).{1,200}GSA/...` in patterns.yml - both map to
-  # "Google" regardless of platform, so one marker covers both.
-  - family: Google
-    version_after: "GSA/"
+    # No "Mozilla/5.0" prefix at all - patterns.yml's real rule is a
+    # giant bot-name alternation this app's name happens to be listed
+    # in, with an optional version.
+    # `(?:[ /]v?(\d+)(?:\.(\d+)(?:\.(\d+)|)|)|)`.
+    - family: WhatsApp
+      version_after: "WhatsApp/"
 
-  # `(FxiOS)/(\d+)\.(\d+)(\.(\d+)|)(\.(\d+)|)` in patterns.yml.
-  - family: Firefox iOS
-    version_after: "FxiOS/"
+    # `Mozilla.{1,200}Android.{1,200}(GSA)/...` and
+    # `(iPod|iPhone|iPad).{1,200}GSA/...` in patterns.yml - both map to
+    # "Google" regardless of platform, so one marker covers both.
+    - family: Google
+      version_after: "GSA/"
 
-  # `Mozilla.{1,200}Mobile.{1,100}(Instagram).(\d+)\.(\d+)\.(\d+)` in
-  # patterns.yml - note the space, not a slash, before the version.
-  - family: Instagram
-    all: ["Mobile"]
-    version_after: "Instagram "
+    # `(FxiOS)/(\d+)\.(\d+)(\.(\d+)|)(\.(\d+)|)` in patterns.yml.
+    - family: Firefox iOS
+      version_after: "FxiOS/"
 
-  - family: Yandex Browser
-    version_after: "YaBrowser/"
-    version_min_parts: 3
+    # `Mozilla.{1,200}Mobile.{1,100}(Instagram).(\d+)\.(\d+)\.(\d+)` in
+    # patterns.yml - note the space, not a slash, before the version.
+    - family: Instagram
+      all: ["Mobile"]
+      version_after: "Instagram "
 
-  - family: Snapchat
-    version_after: "Snapchat/"
-    version_min_parts: 4
+    - family: Yandex Browser
+      version_after: "YaBrowser/"
+      version_min_parts: 3
 
-  - family: Ecosia iOS
-    version_after: "Ecosia ios@"
-    version_min_parts: 4
+    - family: Snapchat
+      version_after: "Snapchat/"
+      version_min_parts: 4
 
-  - family: Ecosia Android
-    version_after: "Ecosia android@"
-    version_min_parts: 4
+    - family: Ecosia iOS
+      version_after: "Ecosia ios@"
+      version_min_parts: 4
 
-  # patterns.yml: `Mozilla.{1,200}Mobile.{1,100}(Ddg)/(\d+)...` vs
-  # `Mozilla.{1,200}(Ddg)/(\d+)...` - "Mobile" anywhere before is what
-  # separates the mobile family from the desktop one.
-  - family: DuckDuckGo Mobile
-    all: ["Mobile"]
-    version_after: "Ddg/"
+    - family: Ecosia Android
+      version_after: "Ecosia android@"
+      version_min_parts: 4
 
-  - family: DuckDuckGo
-    version_after: "Ddg/"
+    # patterns.yml: `Mozilla.{1,200}Mobile.{1,100}(Ddg)/(\d+)...` vs
+    # `Mozilla.{1,200}(Ddg)/(\d+)...` - "Mobile" anywhere before is what
+    # separates the mobile family from the desktop one.
+    - family: DuckDuckGo Mobile
+      all: ["Mobile"]
+      version_after: "Ddg/"
 
-  # patterns.yml: `(EdgiOS|EdgA)/...` -> "Edge Mobile", checked before the
-  # desktop `Edg/` branch - neither contains the literal "Edg/" substring
-  # (no slash right after "Edg"), so order between them doesn't matter,
-  # but both must precede Mobile Safari/Chrome Mobile below.
-  - family: Edge Mobile
-    version_after: "EdgiOS/"
+    - family: DuckDuckGo
+      version_after: "Ddg/"
 
-  - family: Edge Mobile
-    version_after: "EdgA/"
+    # patterns.yml: `(EdgiOS|EdgA)/...` -> "Edge Mobile", checked before
+    # the desktop `Edg/` branch - neither contains the literal "Edg/"
+    # substring (no slash right after "Edg"), so order between them
+    # doesn't matter, but both must precede Mobile Safari/Chrome Mobile
+    # below.
+    - family: Edge Mobile
+      version_after: "EdgiOS/"
 
-  - family: Edge
-    version_after: "Edg/"
+    - family: Edge Mobile
+      version_after: "EdgA/"
 
-  # patterns.yml: `(?:Mobile Safari).{1,300}(OPR)/...` -> "Opera Mobile" -
-  # an Android Opera UA also carries "Chrome/" and "Mobile", so this must
-  # precede Chrome Mobile below too.
-  - family: Opera Mobile
-    all: ["Mobile Safari"]
-    version_after: "OPR/"
+    - family: Edge
+      version_after: "Edg/"
 
-  - family: Opera
-    version_after: "OPR/"
+    # patterns.yml: `(?:Mobile Safari).{1,300}(OPR)/...` -> "Opera
+    # Mobile" - an Android Opera UA also carries "Chrome/" and "Mobile",
+    # so this must precede Chrome Mobile below too.
+    - family: Opera Mobile
+      all: ["Mobile Safari"]
+      version_after: "OPR/"
 
-  - family: Samsung Internet
-    version_after: "SamsungBrowser/"
+    - family: Opera
+      version_after: "OPR/"
 
-  # Chrome on iOS reports its own version under "CriOS/", not "Chrome/".
-  - family: Chrome Mobile iOS
-    version_after: "CriOS/"
+    - family: Samsung Internet
+      version_after: "SamsungBrowser/"
 
-  # `Chrome/(\d+)\.(\d+)\.(\d+)\.(\d+) Mobile(?:[ /]|$)` in patterns.yml -
-  # a full 4-part version followed by a " Mobile" token.
-  - family: Chrome Mobile
-    all: [" Mobile"]
-    version_after: "Chrome/"
-    version_min_parts: 4
+    # Chrome on iOS reports its own version under "CriOS/", not
+    # "Chrome/".
+    - family: Chrome Mobile iOS
+      version_after: "CriOS/"
 
-  # Unlike Chrome Mobile above, desktop Chrome's real pattern is
-  # `(Chromium|Chrome)/(\d+)\.(\d+)(?:\.(\d+)|)(?:\.(\d+)|)` - major.minor
-  # is the real minimum, patch/build are optional. A 4-part minimum here
-  # was wrongly copied from the Chrome Mobile rule above and confirmed
-  # against real traffic to under-cover `Chrome/124.0`-shaped UAs.
-  - family: Chrome
-    version_after: "Chrome/"
-    version_min_parts: 2
+    # `Chrome/(\d+)\.(\d+)\.(\d+)\.(\d+) Mobile(?:[ /]|$)` in
+    # patterns.yml - a full 4-part version followed by a " Mobile"
+    # token.
+    - family: Chrome Mobile
+      all: [" Mobile"]
+      version_after: "Chrome/"
+      version_min_parts: 4
 
-  # `(?:Mobile|Tablet);.{0,200}(Firefox)/(\d+)\.(\d+)` in patterns.yml.
-  - family: Firefox Mobile
-    any_of: ["Mobile", "Tablet"]
-    version_after: "Firefox/"
+    # Unlike Chrome Mobile above, desktop Chrome's real pattern is
+    # `(Chromium|Chrome)/(\d+)\.(\d+)(?:\.(\d+)|)(?:\.(\d+)|)` -
+    # major.minor is the real minimum, patch/build are optional. A
+    # 4-part minimum here was wrongly copied from the Chrome Mobile rule
+    # above and confirmed against real traffic to under-cover
+    # `Chrome/124.0`-shaped UAs.
+    - family: Chrome
+      version_after: "Chrome/"
+      version_min_parts: 2
 
-  - family: Firefox
-    version_after: "Firefox/"
+    # `(?:Mobile|Tablet);.{0,200}(Firefox)/(\d+)\.(\d+)` in
+    # patterns.yml.
+    - family: Firefox Mobile
+      any_of: ["Mobile", "Tablet"]
+      version_after: "Firefox/"
 
-  # `(iPod|iPhone|iPad).{1,200}Version/(\d+)\.(\d+)(?:\.(\d+)|).{1,200}[ +]Safari`
-  # in patterns.yml - a device token is what separates "Mobile Safari"
-  # from plain desktop "Safari" below.
-  - family: Mobile Safari
-    all: ["Safari"]
-    any_of: ["iPhone", "iPad", "iPod"]
-    version_after: "Version/"
+    - family: Firefox
+      version_after: "Firefox/"
 
-  - family: Safari
-    all: ["Safari"]
-    version_after: "Version/"
+    # `(iPod|iPhone|iPad).{1,200}Version/(\d+)\.(\d+)(?:\.(\d+)|).{1,200}[ +]Safari`
+    # in patterns.yml - a device token is what separates "Mobile Safari"
+    # from plain desktop "Safari" below.
+    - family: Mobile Safari
+      all: ["Safari"]
+      any_of: ["iPhone", "iPad", "iPod"]
+      version_after: "Version/"
+
+    - family: Safari
+      all: ["Safari"]
+      version_after: "Version/"
+
+os:
+  # Same idea, applied to OS identification. Android and Chrome OS UAs
+  # both also contain the literal substring "Linux" (as a kernel
+  # reference), so they must be checked before the generic Linux branch
+  # or it would win instead.
+  #
+  #   version_after version is the digit run right after this marker;
+  #                 both "_" and "." are accepted as separators in the
+  #                 source (real UAs use underscores here, e.g.
+  #                 "Mac OS X 10_15_7"), always normalised to "." to
+  #                 match UAParser.Version's to_string/1 output
+  #   version_map   for OSes where the version in the UA string isn't
+  #                 the human-readable version at all - Windows NT build
+  #                 numbers are a hardcoded lookup table in patterns.yml
+  #                 (NT 6.1 -> "7", NT 10.0 -> "10", ...), not a formula
+  branches:
+    # `(Windows NT 10\.0)`, `(Win(?:dows NT |32NT\/)6\.1)` -> "7", etc.
+    # in patterns.yml - a fixed table of NT build number -> marketing
+    # name.
+    - family: Windows
+      version_after: "Windows NT "
+      version_map:
+        "5.0": "2000"
+        "5.1": "XP"
+        "5.2": "XP"
+        "6.0": "Vista"
+        "6.1": "7"
+        "6.2": "8"
+        "6.3": "8.1"
+        "6.4": "10"
+        "10.0": "10"
+
+    # `(Android)[ \-/](\d+)(?:\.(\d+)|)(?:[.\-]([a-z0-9]+)|)` in
+    # patterns.yml. Must precede Chrome OS/Linux below - an Android UA's
+    # platform info also literally contains "Linux".
+    - family: Android
+      version_after: "Android "
+
+    # `(CrOS) [a-z0-9_]+ (\d+)\.(\d+)(?:\.(\d+)|)` in patterns.yml. Must
+    # precede Linux below for the same reason.
+    - family: Chrome OS
+      version_after: "CrOS "
+
+    # `(CPU[ +]OS|iPhone[ +]OS|...)[ +]+(\d+)[_\.](\d+)...` in
+    # patterns.yml - this covers the common "iPhone OS" wording; the
+    # "CPU OS" (iPad) and other listed variants aren't covered here.
+    - family: iOS
+      version_after: "iPhone OS "
+
+    # `((?:Mac[ +]?|; )OS[ +]X)[\s+/](?:(\d+)[_.](\d+)...` in
+    # patterns.yml - this covers the common "Mac OS X" wording.
+    - family: Mac OS X
+      version_after: "Mac OS X "
+
+    # `(Ubuntu|Kubuntu|Arch Linux|CentOS|...)` in patterns.yml - a
+    # distro name, bare, no version. Must precede Linux below - an
+    # Ubuntu desktop UA's platform info also literally contains "Linux".
+    # Only Ubuntu is covered here; the other distro names in that
+    # alternation didn't show up in the real traffic sample this was
+    # checked against.
+    - family: Ubuntu
+      version_after: "Ubuntu"
+
+    # `(Linux)(?:[ /](\d+)\.(\d+)(?:\.(\d+)|)|)` in patterns.yml - bare
+    # "Linux" with no version is common (desktop Linux Chrome UAs), so
+    # no version_min_parts here.
+    - family: Linux
+      version_after: "Linux"
