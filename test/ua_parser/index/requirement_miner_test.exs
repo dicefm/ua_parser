@@ -1,9 +1,10 @@
-defmodule UAParser.RequirementMinerTest do
+defmodule UAParser.Index.RequirementMinerTest do
   use ExUnit.Case
 
-  alias UAParser.{RequirementMiner, Storage}
+  alias UAParser.Index.RequirementMiner
+  alias UAParser.Storage
 
-  doctest UAParser.RequirementMiner
+  doctest UAParser.Index.RequirementMiner
 
   describe "requirement/1" do
     test "a plain literal is its own requirement" do

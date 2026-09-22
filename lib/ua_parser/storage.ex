@@ -10,7 +10,8 @@ defmodule UAParser.Storage do
   linear scan.
   """
 
-  alias UAParser.{Index, Processor, Requirements}
+  alias UAParser.{Index, Processor}
+  alias UAParser.Index.Requirements
 
   Application.start(:yamerl)
 
@@ -37,7 +38,7 @@ defmodule UAParser.Storage do
   Reads and processes the bundled `patterns.yml` into the three pattern
   lists, without touching `persistent_term`. Compiling each pattern's
   regex is a runtime concern, tied to the exact OTP/PCRE build that will
-  run it - see `UAParser.Requirements` for the compile-time counterpart
+  run it - see `UAParser.Index.Requirements` for the compile-time counterpart
   that mines index requirements from the same file's regex sources.
   """
   @spec read_from_yaml() :: {term(), term(), term()}

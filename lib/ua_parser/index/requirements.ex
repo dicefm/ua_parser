@@ -1,9 +1,9 @@
-defmodule UAParser.Requirements do
+defmodule UAParser.Index.Requirements do
   @moduledoc """
   Index requirements for the bundled patterns, mined once at compile time
   and embedded as a literal.
 
-  `UAParser.RequirementMiner.requirement/1` reads a regex's *source
+  `UAParser.Index.RequirementMiner.requirement/1` reads a regex's *source
   string*, which is plain, portable data - safe to compute here, unlike
   compiling the regex itself, which stays a runtime concern tied to the
   exact OTP/PCRE build that will run it (see `UAParser.Storage`).
@@ -14,9 +14,10 @@ defmodule UAParser.Requirements do
   `UAParser.Index` does not need to guard against drift.
   """
 
-  alias UAParser.{Processor, RequirementMiner}
+  alias UAParser.Index.RequirementMiner
+  alias UAParser.Processor
 
-  @patterns_path Path.expand("../../priv/patterns.yml", __DIR__)
+  @patterns_path Path.expand("../../../priv/patterns.yml", __DIR__)
   @external_resource @patterns_path
 
   [user_agents, os, devices] =
@@ -38,7 +39,5 @@ defmodule UAParser.Requirements do
   `{user_agent, os, device}` - in the same order, and the same length, as
   the pattern lists `UAParser.Storage.list/0` returns.
   """
-  @spec bundled() ::
-          {[RequirementMiner.requirement()], [RequirementMiner.requirement()], [RequirementMiner.requirement()]}
   def bundled, do: {@user_agents, @os, @devices}
 end

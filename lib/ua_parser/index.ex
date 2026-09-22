@@ -12,8 +12,8 @@ defmodule UAParser.Index do
 
   So each pattern is built from a *requirement* - a literal that any
   matching string must contain, or an "any of" set from an alternation -
-  derived from its regex source by `UAParser.RequirementMiner`. That
-  derivation happens once, at compile time (see `UAParser.Requirements`);
+  derived from its regex source by `UAParser.Index.RequirementMiner`. That
+  derivation happens once, at compile time (see `UAParser.Index.Requirements`);
   this module only ever consumes its output, so the parse hot path never
   runs a regex-source scanner.
 
@@ -29,7 +29,7 @@ defmodule UAParser.Index do
   character, which is worth far more than it costs.
   """
 
-  alias UAParser.RequirementMiner
+  alias UAParser.Index.RequirementMiner
 
   @enforce_keys [:patterns, :always, :trie]
   defstruct [:patterns, :always, :trie]
@@ -43,7 +43,7 @@ defmodule UAParser.Index do
   @doc """
   Builds an index from an ordered list of pattern groups and the
   requirements mined from them, in the same order (see
-  `UAParser.Requirements`).
+  `UAParser.Index.Requirements`).
   """
   @spec build([keyword()], [RequirementMiner.requirement()]) :: t()
   def build(groups, requirements) do

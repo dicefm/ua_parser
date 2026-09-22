@@ -1,12 +1,11 @@
-defmodule UAParser.RequirementMiner do
+defmodule UAParser.Index.RequirementMiner do
   @moduledoc """
   Derives, from a pattern's regex source, a *requirement*: a literal that any
-  matching string must contain. This is offline, maintainer-facing tooling -
-  it runs once, from `mix ua_parser.gen_requirements`, whenever
-  `priv/patterns.yml` changes. The result is checked into
-  `priv/requirements.exs` and loaded by `UAParser.Storage` at boot, so none
-  of this module's code runs in the parse hot path; `UAParser.Index` only
-  ever consumes its output.
+  matching string must contain. This only needs a regex's source string -
+  plain, portable data - never the compiled regex itself. `UAParser.Index.Requirements`
+  calls this once per bundled pattern, at compile time, and embeds the
+  result as a literal, so none of this module's code runs in the parse hot
+  path; `UAParser.Index` only ever consumes that output.
 
   Deriving a requirement is two passes:
 
@@ -86,16 +85,16 @@ defmodule UAParser.RequirementMiner do
 
   ## Examples
 
-      iex> UAParser.RequirementMiner.requirement("Chrome/(\\\\d+)\\\\.(\\\\d+)")
+      iex> UAParser.Index.RequirementMiner.requirement("Chrome/(\\\\d+)\\\\.(\\\\d+)")
       {:all, "chrome/"}
 
-      iex> UAParser.RequirementMiner.requirement("(Googlebot|Bingbot)/(\\\\d+)")
+      iex> UAParser.Index.RequirementMiner.requirement("(Googlebot|Bingbot)/(\\\\d+)")
       {:any, ["googlebot", "bingbot"]}
 
-      iex> UAParser.RequirementMiner.requirement("[Ss]pider/(\\\\d+)")
+      iex> UAParser.Index.RequirementMiner.requirement("[Ss]pider/(\\\\d+)")
       {:all, "spider/"}
 
-      iex> UAParser.RequirementMiner.requirement("(\\\\d+)|(\\\\w+)")
+      iex> UAParser.Index.RequirementMiner.requirement("(\\\\d+)|(\\\\w+)")
       nil
 
   """

@@ -1,7 +1,8 @@
-defmodule UAParser.RequirementsTest do
+defmodule UAParser.Index.RequirementsTest do
   use ExUnit.Case
 
-  alias UAParser.{RequirementMiner, Requirements, Storage}
+  alias UAParser.Index.{RequirementMiner, Requirements}
+  alias UAParser.Storage
 
   describe "bundled/0" do
     test "matches a fresh mining pass over the same patterns, in the same order" do
