@@ -121,9 +121,14 @@ branches:
     version_after: "Chrome/"
     version_min_parts: 4
 
+  # Unlike Chrome Mobile above, desktop Chrome's real pattern is
+  # `(Chromium|Chrome)/(\d+)\.(\d+)(?:\.(\d+)|)(?:\.(\d+)|)` - major.minor
+  # is the real minimum, patch/build are optional. A 4-part minimum here
+  # was wrongly copied from the Chrome Mobile rule above and confirmed
+  # against real traffic to under-cover `Chrome/124.0`-shaped UAs.
   - family: Chrome
     version_after: "Chrome/"
-    version_min_parts: 4
+    version_min_parts: 2
 
   # `(?:Mobile|Tablet);.{0,200}(Firefox)/(\d+)\.(\d+)` in patterns.yml.
   - family: Firefox Mobile
