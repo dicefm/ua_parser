@@ -17,7 +17,9 @@ defmodule UAParser.Experimental.TreeMatcher do
   patterns.yml's real Chrome pattern either, since it requires a full
   X.Y.Z.W version, so this tree doesn't claim it either). A top-level
   `exclude_if_any` short-circuits to `:no_match` for known spoofing risks
-  (bots that embed a real browser's tokens for compatibility).
+  (bots that embed a real browser's tokens for compatibility) - listed in
+  both common capitalizations rather than folding the whole subject
+  string's case, which would allocate a full copy on every call.
 
   At compile time, this module reads that document and generates one
   `try_branch/2` function clause per branch; a miss recurses to the next
@@ -98,17 +100,23 @@ defmodule UAParser.Experimental.TreeMatcher do
   """
   @spec match(binary()) :: {binary(), binary()} | :no_match
   def match(string) do
-    if Enum.any?(@exclude_words, &contains?(String.downcase(string), &1)) do
+    if :binary.match(string, @exclude_words) != :nomatch do
       :no_match
     else
       try_branch(0, string)
     end
   end
 
+  # `version_after` is checked first, and only once, whatever else the
+  # branch requires: it's the branch's primary, most-discriminating
+  # condition, and most branches fail here for a given string (their
+  # marker just isn't in it) - so this is the fast path for the common
+  # case of "wrong branch, try the next one" without spending any extra
+  # :binary.match calls on `all`/`any_of` first.
   defp check_branch(string, %{all: all, any_of: any_of, version_after: marker, min_parts: min_parts}) do
-    with true <- Enum.all?(all, &contains?(string, &1)),
+    with {pos, len} <- :binary.match(string, marker),
+         true <- Enum.all?(all, &contains?(string, &1)),
          true <- any_of == [] or Enum.any?(any_of, &contains?(string, &1)),
-         {pos, len} <- :binary.match(string, marker),
          version <- extract_version(string, pos + len),
          true <- version_parts(version) >= min_parts do
       {:ok, version}

@@ -4,14 +4,20 @@
 # user-agent shapes, used by UAParser.Experimental.TreeMatcher to compare a
 # compile-time-generated recursive matcher (no Regex) against the existing
 # Index + Regex.run path. Rules below are reverse-engineered from the real
-# winning patterns in patterns.yml for each shape, checked against the
+# winning patterns in patterns.yml for each shape, checked against a
 # 1000-UA real traffic sample.
 #
 # Branches are tried in order - first one whose conditions are all
-# satisfied wins:
-#   all           every one of these substrings must be present
+# satisfied wins. Many in-app browsers and mobile variants embed the same
+# "Chrome/" or "Version/...Safari" tokens the generic branches key off, for
+# compatibility - they must come first, or the generic branch would claim
+# them.
+#
+#   all           every one of these substrings must also be present
+#                 (in addition to version_after itself)
 #   any_of        at least one of these substrings must be present
-#   version_after version is the digit-and-dot run right after this marker
+#   version_after version is the digit-and-dot run right after this marker;
+#                 its mere presence is the branch's primary condition
 #   version_min_parts
 #                 minimum dot-separated segments the version needs (e.g. a
 #                 real Chrome/OS version is always X.Y.Z.W - a "reduced"
@@ -24,53 +30,117 @@
 # a real Chrome/Safari UA shape for site-compatibility reasons, and this
 # tree has no visibility into the ~30 bot-detection patterns that need to
 # outrank them, so it defers to the general system instead of guessing.
+# Listed in both common capitalizations rather than case-folding the
+# whole subject string, which would allocate a full copy on every call.
 exclude_if_any:
   - "bot"
+  - "Bot"
+  - "BOT"
   - "crawler"
+  - "Crawler"
   - "spider"
+  - "Spider"
+
+# NOTE: a "fast track" pre-scan was tried here - one multi-pattern
+# :binary.match deciding whether any override branch could apply, jumping
+# straight to the plain branches otherwise - and measured slower on real
+# traffic (2.31x -> 1.46-1.85x), because a meaningful share of real UAs
+# do carry an override marker (Edge, Firefox, Samsung Internet, ...), so
+# the extra scan cost more often than it saved. Reverted; see git history
+# on this file if revisiting.
 
 branches:
+  # In-app / white-label browsers that brand an otherwise generic
+  # Chrome- or Safari-shaped UA with their own token. All must be checked
+  # before the generic branches below, or the generic branch would win.
+
+  - family: Electron
+    version_after: "Electron/"
+    version_min_parts: 3
+
+  - family: Yandex Browser
+    version_after: "YaBrowser/"
+    version_min_parts: 3
+
+  - family: Snapchat
+    version_after: "Snapchat/"
+    version_min_parts: 4
+
+  - family: Ecosia iOS
+    version_after: "Ecosia ios@"
+    version_min_parts: 4
+
+  - family: Ecosia Android
+    version_after: "Ecosia android@"
+    version_min_parts: 4
+
+  # patterns.yml: `Mozilla.{1,200}Mobile.{1,100}(Ddg)/(\d+)...` vs
+  # `Mozilla.{1,200}(Ddg)/(\d+)...` - "Mobile" anywhere before is what
+  # separates the mobile family from the desktop one.
+  - family: DuckDuckGo Mobile
+    all: ["Mobile"]
+    version_after: "Ddg/"
+
+  - family: DuckDuckGo
+    version_after: "Ddg/"
+
+  # patterns.yml: `(EdgiOS|EdgA)/...` -> "Edge Mobile", checked before the
+  # desktop `Edg/` branch - neither contains the literal "Edg/" substring
+  # (no slash right after "Edg"), so order between them doesn't matter,
+  # but both must precede Mobile Safari/Chrome Mobile below.
+  - family: Edge Mobile
+    version_after: "EdgiOS/"
+
+  - family: Edge Mobile
+    version_after: "EdgA/"
+
   - family: Edge
-    all: ["Edg/"]
     version_after: "Edg/"
 
+  # patterns.yml: `(?:Mobile Safari).{1,300}(OPR)/...` -> "Opera Mobile" -
+  # an Android Opera UA also carries "Chrome/" and "Mobile", so this must
+  # precede Chrome Mobile below too.
+  - family: Opera Mobile
+    all: ["Mobile Safari"]
+    version_after: "OPR/"
+
   - family: Opera
-    all: ["OPR/"]
     version_after: "OPR/"
 
   - family: Samsung Internet
-    all: ["SamsungBrowser/"]
     version_after: "SamsungBrowser/"
 
   # Chrome on iOS reports its own version under "CriOS/", not "Chrome/".
   - family: Chrome Mobile iOS
-    all: ["CriOS/"]
     version_after: "CriOS/"
 
   # `Chrome/(\d+)\.(\d+)\.(\d+)\.(\d+) Mobile(?:[ /]|$)` in patterns.yml -
   # a full 4-part version followed by a " Mobile" token.
   - family: Chrome Mobile
-    all: ["Chrome/", " Mobile"]
+    all: [" Mobile"]
     version_after: "Chrome/"
     version_min_parts: 4
 
   - family: Chrome
-    all: ["Chrome/"]
     version_after: "Chrome/"
     version_min_parts: 4
 
+  # `(?:Mobile|Tablet);.{0,200}(Firefox)/(\d+)\.(\d+)` in patterns.yml.
+  - family: Firefox Mobile
+    any_of: ["Mobile", "Tablet"]
+    version_after: "Firefox/"
+
   - family: Firefox
-    all: ["Firefox/"]
     version_after: "Firefox/"
 
   # `(iPod|iPhone|iPad).{1,200}Version/(\d+)\.(\d+)(?:\.(\d+)|).{1,200}[ +]Safari`
   # in patterns.yml - a device token is what separates "Mobile Safari"
   # from plain desktop "Safari" below.
   - family: Mobile Safari
-    all: ["Version/", "Safari"]
+    all: ["Safari"]
     any_of: ["iPhone", "iPad", "iPod"]
     version_after: "Version/"
 
   - family: Safari
-    all: ["Version/", "Safari"]
+    all: ["Safari"]
     version_after: "Version/"
