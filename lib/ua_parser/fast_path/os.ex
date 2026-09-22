@@ -1,18 +1,9 @@
-defmodule UAParser.Experimental.OSMatcher do
+defmodule UAParser.FastPath.OS do
   @moduledoc """
-  EXPERIMENTAL - not part of the public API, not wired into `UAParser.parse/1`.
-
-  Same idea as `UAParser.Experimental.TreeMatcher`, applied to the OS half
-  of parsing instead of the browser half: the `os` section of
-  `priv/ua_shapes.yml` lists OS shapes in priority order, compiled at
-  compile time into a tree of recursive Elixir functions, no `Regex.run`
-  anywhere.
-
-  This exists because `UAParser.Index` already treats user-agent, OS and
-  device as three independent pattern lists - a single tree trying to
-  cover all three at once would be solving three different problems in
-  one place. Splitting them the same way the real system does keeps each
-  tree only needing to know about shapes in its own domain.
+  Matches the `os` section of `priv/ua_shapes.yml`. See
+  `UAParser.FastPath.Browser`'s moduledoc for the shared design (compile
+  time, recursion, no regex) and `UAParser.FastPath`'s for why OS is its own
+  independent tree rather than sharing one with `Browser`.
 
   A branch's version can come two ways:
 
@@ -21,19 +12,17 @@ defmodule UAParser.Experimental.OSMatcher do
     * looked up (`version_map`) - Windows NT build numbers aren't the
       marketing version at all (`Windows NT 6.1` is "Windows 7"), so
       patterns.yml hardcodes that mapping, and this does too.
-
-  See `UAParser.Experimental.TreeMatcher`'s moduledoc for the rest of the
-  design (why compile time, why recursion, why no regex).
   """
 
-  alias UAParser.Experimental.ShapeDocument
+  alias UAParser.{FastPath, OperatingSystem}
+  alias UAParser.FastPath.Document
 
   @shapes_path Path.expand("../../../priv/ua_shapes.yml", __DIR__)
   @external_resource @shapes_path
 
-  document = ShapeDocument.section(@shapes_path, :os)
-  fetch_str = &ShapeDocument.fetch_str/2
-  fetch_map = &ShapeDocument.fetch_map/2
+  document = Document.section(@shapes_path, :os)
+  fetch_str = &Document.fetch_str/2
+  fetch_map = &Document.fetch_map/2
 
   branches =
     document
@@ -52,7 +41,7 @@ defmodule UAParser.Experimental.OSMatcher do
   for {branch, index} <- Enum.with_index(branches) do
     defp try_branch(unquote(index), string) do
       case check_branch(string, unquote(Macro.escape(branch))) do
-        {:ok, version} -> {unquote(branch.family), version}
+        {:ok, version} -> %OperatingSystem{family: unquote(branch.family), version: FastPath.version(version)}
         :fail -> try_branch(unquote(index + 1), string)
       end
     end
@@ -60,36 +49,23 @@ defmodule UAParser.Experimental.OSMatcher do
 
   defp try_branch(_index, _string), do: :no_match
 
-  @doc """
-  Compiles every marker this module searches for via
-  `:binary.compile_pattern/1` and stores the results in `:persistent_term`,
-  keyed by the literal string. Call once (e.g. from `UAParser.Application`)
-  before `match/1`. See `UAParser.Experimental.TreeMatcher.warm/0`.
-  """
+  @doc "Compiles this module's patterns into `:persistent_term`. Call once, at boot."
   @spec warm() :: :ok
-  def warm do
-    for needle <- @all_needles, do: :persistent_term.put({__MODULE__, needle}, :binary.compile_pattern(needle))
-    :ok
-  end
+  def warm, do: Document.warm(__MODULE__, @all_needles)
 
-  @doc """
-  Matches `string` against the OS shape document, returning
-  `{family, version}` or `:no_match`.
-  """
-  @spec match(binary()) :: {binary(), binary()} | :no_match
+  @doc "Matches `string`, returning a `UAParser.OperatingSystem` or `:no_match`."
+  @spec match(binary()) :: OperatingSystem.t() | :no_match
   def match(string), do: try_branch(0, string)
 
-  defp compiled(needle), do: :persistent_term.get({__MODULE__, needle})
-
   defp check_branch(string, %{version_after: marker, version_map: nil}) do
-    case :binary.match(string, compiled(marker)) do
+    case :binary.match(string, Document.compiled(__MODULE__, marker)) do
       {pos, len} -> {:ok, extract_version(string, pos + len)}
       :nomatch -> :fail
     end
   end
 
   defp check_branch(string, %{version_after: marker, version_map: version_map}) do
-    with {pos, len} <- :binary.match(string, compiled(marker)),
+    with {pos, len} <- :binary.match(string, Document.compiled(__MODULE__, marker)),
          raw <- extract_version(string, pos + len),
          {:ok, mapped} <- Map.fetch(version_map, raw) do
       {:ok, mapped}

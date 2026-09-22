@@ -1,9 +1,14 @@
 defmodule UAParser.Parser do
   @moduledoc """
   Handle parsing the user-agent string.
+
+  For the bundled patterns, `UAParser.FastPath` tries a small set of
+  common, regex-free shapes first; anything it doesn't recognise falls
+  back to `UAParser.Index` (or a linear scan, for a caller-supplied
+  pattern list) - both paths pick the same pattern patterns.yml would.
   """
 
-  alias UAParser.{Index, Storage}
+  alias UAParser.{FastPath, Index, Storage}
   alias UAParser.Parsers.{Device, OperatingSystem, UA}
 
   @doc """
@@ -49,19 +54,43 @@ defmodule UAParser.Parser do
   end
 
   defp parse_device({user_agent, acc}, patterns, index) do
-    device = find_and_parse(patterns, index, user_agent, Device)
+    device =
+      shape_or_fallback(index, FastPath.Device, user_agent, fn ->
+        find_and_parse(patterns, index, user_agent, Device)
+      end)
+
     {user_agent, Map.put(acc, :device, device)}
   end
 
   defp parse_os({user_agent, acc}, patterns, index) do
-    os = find_and_parse(patterns, index, user_agent, OperatingSystem)
+    os =
+      shape_or_fallback(index, FastPath.OS, user_agent, fn ->
+        find_and_parse(patterns, index, user_agent, OperatingSystem)
+      end)
+
     Map.put(acc, :os, os)
   end
 
   defp parse_user_agent(user_agent, patterns, index) do
-    ua = find_and_parse(patterns, index, user_agent, UA)
+    ua =
+      shape_or_fallback(index, FastPath.Browser, user_agent, fn ->
+        find_and_parse(patterns, index, user_agent, UA)
+      end)
 
     {user_agent, ua}
+  end
+
+  # FastPath only applies to the bundled patterns (index present - a
+  # caller-supplied pattern list gets nil, same as UAParser.Index does),
+  # since every shape is grounded in the bundled patterns.yml's specific
+  # regexes, not whatever a caller happens to pass in.
+  defp shape_or_fallback(nil, _shape, _user_agent, fallback), do: fallback.()
+
+  defp shape_or_fallback(_index, shape, user_agent, fallback) do
+    case shape.match(user_agent) do
+      :no_match -> fallback.()
+      result -> result
+    end
   end
 
   defp sanitize(user_agent), do: String.trim(user_agent)

@@ -1,13 +1,15 @@
-defmodule UAParser.Experimental.ShapeDocument do
+defmodule UAParser.FastPath.Document do
   @moduledoc """
-  EXPERIMENTAL - shared compile-time helpers for reading a section of
-  `priv/ua_shapes.yml`'s yamerl-parsed keyword lists.
+  Shared helpers for `UAParser.FastPath.Browser`/`OS`/`Device`: reading a
+  section of `priv/ua_shapes.yml`'s yamerl-parsed keyword lists at compile
+  time, and compiling+caching `:binary.match/2` patterns at runtime.
 
-  `UAParser.Experimental.TreeMatcher` (the `user_agent` section) and
-  `UAParser.Experimental.OSMatcher` (the `os` section) read different
-  parts of the same document - they don't interact, but they need the
-  same handful of "pull this key out as a string/list/map" conversions,
-  so that part is shared instead of duplicated.
+  `:binary.compile_pattern/1`'s result is a reference - it cannot be a
+  compile-time literal (Elixir rejects embedding it as a module
+  attribute), so every needle a matcher searches for is compiled once, at
+  boot, by that matcher's `warm/0`, and read back from `:persistent_term`
+  on every `match/1` call instead of being recompiled from a raw literal
+  each time.
   """
 
   @doc "Reads `path` and returns the keyword list under `section` (an atom)."
@@ -52,4 +54,15 @@ defmodule UAParser.Experimental.ShapeDocument do
       nil -> nil
     end
   end
+
+  @doc "Compiles each of `needles` (a binary or a list of binaries) for `module` and caches it."
+  @spec warm(module(), [binary() | [binary()]]) :: :ok
+  def warm(module, needles) do
+    for needle <- needles, do: :persistent_term.put({module, needle}, :binary.compile_pattern(needle))
+    :ok
+  end
+
+  @doc "Reads back a pattern compiled by `warm/2`."
+  @spec compiled(module(), binary() | [binary()]) :: :binary.cp()
+  def compiled(module, needle), do: :persistent_term.get({module, needle})
 end

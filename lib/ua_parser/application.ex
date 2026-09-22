@@ -3,6 +3,7 @@ defmodule UAParser.Application do
 
   def start(_type, _args) do
     UAParser.Storage.load_table()
+    UAParser.FastPath.warm()
 
     children = []
 

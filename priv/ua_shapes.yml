@@ -1,18 +1,17 @@
-# EXPERIMENTAL - not part of the bundled patterns.
+# One document, three independent sections - `user_agent`, `os`, `device`
+# - because UAParser.Index already treats these as three independent
+# pattern lists (see UAParser.Parser: it calls Index.find/2 separately
+# for each). A branch falling through in one section only tries the next
+# branch in that same section, never a branch in another; keeping them
+# in one file is purely for convenience, not because the trees interact.
 #
-# One document, two independent sections - `user_agent` (browser
-# identification) and `os` - because UAParser.Index already treats these
-# as two completely independent pattern lists (see UAParser.Parser: it
-# calls Index.find/2 separately for each). A browser branch falling
-# through only tries the next browser branch, never an OS one; keeping
-# them in one file is purely for convenience, not because the two trees
-# interact.
-#
-# Rules in both sections are reverse-engineered from the real winning
+# Rules in every section are reverse-engineered from the real winning
 # pattern in patterns.yml for each shape, checked against a 1000-UA real
-# traffic sample - never guessed. See UAParser.Experimental.TreeMatcher
-# and UAParser.Experimental.OSMatcher for how each section is compiled
-# into a tree of recursive Elixir functions, with no Regex involved.
+# traffic sample - never guessed. See UAParser.FastPath.Browser,
+# UAParser.FastPath.OS and UAParser.FastPath.Device for how each section is
+# compiled into a tree of recursive Elixir functions, with no Regex
+# involved - UAParser.Parser tries each one first, falling back to
+# UAParser.Index + Regex.run for whatever it doesn't recognise.
 
 user_agent:
   # Branches are tried in order - first one whose conditions are all
@@ -24,6 +23,10 @@ user_agent:
   #   all           every one of these substrings must also be present
   #                 (in addition to version_after itself)
   #   any_of        at least one of these substrings must be present
+  #   none          none of these substrings may be present - the
+  #                 opposite of `all`, for branches broad enough to
+  #                 collide with a specific name checked earlier in the
+  #                 real pattern list (see the Safari branches below)
   #   version_after version is the digit-and-dot run right after this
   #                 marker; its mere presence is the branch's primary
   #                 condition
@@ -178,17 +181,40 @@ user_agent:
     - family: Firefox
       version_after: "Firefox/"
 
-    # `(iPod|iPhone|iPad).{1,200}Version/(\d+)\.(\d+)(?:\.(\d+)|).{1,200}[ +]Safari`
-    # in patterns.yml - a device token is what separates "Mobile Safari"
-    # from plain desktop "Safari" below.
+    # patterns.yml has a giant alternation of ~60 legacy/niche browser
+    # names (bingbot, Skyfire, Opera, Netscape, Konqueror, iCab, ...)
+    # checked well before the generic "Version/...Safari/" fallback - any
+    # of them can produce a UA that *also* has a Safari-shaped tail
+    # (e.g. "...Version/4.0 Safari/530.17 Skyfire/2.0"), which the real
+    # system correctly attributes to the specific name, not Safari. Found
+    # via the existing test suite, not the real-traffic sample (Skyfire
+    # is defunct and won't appear in current traffic - a reminder that
+    # "verified against real traffic" doesn't mean "verified against
+    # every shape patterns.yml can produce"). Duplicated across both
+    # branches below rather than shared via a YAML anchor, to not depend
+    # on yamerl supporting merge keys.
     - family: Mobile Safari
       all: ["Safari"]
       any_of: ["iPhone", "iPad", "iPod"]
       version_after: "Version/"
+      none: [bingbot, Bolt, AdobeAIR, Jasmine, IceCat, Skyfire, Midori, Maxthon, Lynx, Arora, IBrowse, Dillo, Camino,
+        Shiira, Fennec, Phoenix, Flock, Netscape, Lunascape, Epiphany, WebPilot, "Opera Mini", Opera, NetFront,
+        Netfront, Konqueror, Googlebot, SeaMonkey, Kazehakase, Vienna, Iceape, Iceweasel, IceWeasel, Iron, K-Meleon,
+        Sleipnir, Galeon, GranParadiso, iCab, iTunes, MacAppStore, NetNewsWire, "Space Bison", Stainless, Orca,
+        Dolfin, BOLT, Minimo, "Tizen Browser", Polaris, Abrowser, Planetweb, "ICE Browser", mDolphin, qutebrowser,
+        Otter, QupZilla, MailBar, kmail2, YahooMobileMail, ExchangeWebServices, ExchangeServicesClient, Dragon,
+        Outlook-iOS-Android]
 
     - family: Safari
       all: ["Safari"]
       version_after: "Version/"
+      none: [bingbot, Bolt, AdobeAIR, Jasmine, IceCat, Skyfire, Midori, Maxthon, Lynx, Arora, IBrowse, Dillo, Camino,
+        Shiira, Fennec, Phoenix, Flock, Netscape, Lunascape, Epiphany, WebPilot, "Opera Mini", Opera, NetFront,
+        Netfront, Konqueror, Googlebot, SeaMonkey, Kazehakase, Vienna, Iceape, Iceweasel, IceWeasel, Iron, K-Meleon,
+        Sleipnir, Galeon, GranParadiso, iCab, iTunes, MacAppStore, NetNewsWire, "Space Bison", Stainless, Orca,
+        Dolfin, BOLT, Minimo, "Tizen Browser", Polaris, Abrowser, Planetweb, "ICE Browser", mDolphin, qutebrowser,
+        Otter, QupZilla, MailBar, kmail2, YahooMobileMail, ExchangeWebServices, ExchangeServicesClient, Dragon,
+        Outlook-iOS-Android]
 
 os:
   # Same idea, applied to OS identification. Android and Chrome OS UAs
