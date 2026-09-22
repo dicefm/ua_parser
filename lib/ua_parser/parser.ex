@@ -22,7 +22,7 @@ defmodule UAParser.Parser do
     {ua_index, os_index, device_index} = indexes_for(patterns)
 
     user_agent
-    |> sanitize
+    |> sanitize()
     |> parse_user_agent(ua_patterns, ua_index)
     |> parse_device(device_patterns, device_index)
     |> parse_os(os_patterns, os_index)
@@ -36,19 +36,29 @@ defmodule UAParser.Parser do
   end
 
   defp parse_user_agent(user_agent, patterns, index) do
-    ua = try_fast_path(index, FastPath.Browser, user_agent, fn -> RegexPath.ua(patterns, index, user_agent) end)
+    ua =
+      try_fast_path(index, FastPath.Browser, user_agent, fn ->
+        RegexPath.ua(patterns, index, user_agent)
+      end)
+
     {user_agent, ua}
   end
 
   defp parse_device({user_agent, acc}, patterns, index) do
     device =
-      try_fast_path(index, FastPath.Device, user_agent, fn -> RegexPath.device(patterns, index, user_agent) end)
+      try_fast_path(index, FastPath.Device, user_agent, fn ->
+        RegexPath.device(patterns, index, user_agent)
+      end)
 
     {user_agent, Map.put(acc, :device, device)}
   end
 
   defp parse_os({user_agent, acc}, patterns, index) do
-    os = try_fast_path(index, FastPath.OS, user_agent, fn -> RegexPath.os(patterns, index, user_agent) end)
+    os =
+      try_fast_path(index, FastPath.OS, user_agent, fn ->
+        RegexPath.os(patterns, index, user_agent)
+      end)
+
     Map.put(acc, :os, os)
   end
 
