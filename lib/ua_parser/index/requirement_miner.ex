@@ -22,7 +22,7 @@ defmodule UAParser.Index.RequirementMiner do
   # A required literal has to be distinctive to be worth indexing; a one or
   # two character string appears in almost every user agent. Three is where
   # it starts paying: it is what "bot" needs, and that one literal alone
-  # decides a pattern that costs 12 us to fail.
+  # decides a pattern that costs 12 microseconds to fail.
   @min_all_length 3
   @min_any_length 3
 
