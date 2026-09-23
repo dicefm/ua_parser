@@ -3,6 +3,8 @@ defmodule UAParser.ParserTest do
 
   alias UAParser.{Parser, Storage}
 
+  doctest UAParser.Parser
+
   @user_agent "Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_5_7; en-us) AppleWebKit/530.17 (KHTML, like Gecko) Version/4.0 Safari/530.17 Skyfire/2.0"
 
   test "parse a user agent given patterns and a string" do
