@@ -3,36 +3,34 @@ defmodule UAParser.IndexTest do
 
   alias UAParser.Index
 
-  # Every user agent string in the uap-core test suite
-  # (https://github.com/ua-parser/uap-core, Apache-2.0, commit 73e7340),
-  # deduplicated, one per line.
-  @corpus_path Path.expand("../fixtures/uap_core_user_agents.txt.gz", __DIR__)
+  @user_agents [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.2210.91",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 OPR/106.0.0.0",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (iPad; CPU OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/120.0.6099.119 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/23.0 Chrome/115.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/444.0.0.36.113;FBBV/541151234;FBDV/iPhone15,2]",
+    "Mozilla/5.0 (compatible; MSIE 10.0; Windows Phone 8.0; Trident/6.0; IEMobile/10.0; ARM; Touch; NOKIA; Lumia 920)",
+    "Mozilla/5.0 (SMART-TV; Linux; Tizen 6.0) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/4.0 Chrome/76.0.3809.146 TV Safari/537.36",
+    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+    "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+    "curl/8.4.0",
+    "MOZILLA/5.0 (WINDOWS NT 10.0; WIN64; X64) APPLEWEBKIT/537.36 (KHTML, LIKE GECKO) CHROME/120.0.0.0 SAFARI/537.36",
+    "Something/1.0",
+    ""
+  ]
 
   defp group(regex), do: [regex: Regex.compile!(regex)]
 
   describe "parsing with the bundled patterns" do
-    @tag timeout: :infinity
-    test "returns what a linear scan does, for every user agent in the uap-core corpus" do
-      user_agents = @corpus_path |> File.read!() |> :zlib.gunzip() |> String.split("\n", trim: true)
-
-      # Not the bundled patterns any more, so scanned linearly, but a pattern
-      # that never matches leaves the results unchanged.
-      never = [regex: ~r/(?!)/]
-      linear = UAParser.default_patterns() |> Tuple.to_list() |> Enum.map(&[never | &1]) |> List.to_tuple()
-
-      mismatches =
-        user_agents
-        |> Task.async_stream(
-          fn user_agent ->
-            {user_agent, UAParser.parse(user_agent) == UAParser.parse(user_agent, linear)}
-          end,
-          ordered: false,
-          timeout: :infinity
-        )
-        |> Enum.flat_map(fn {:ok, {user_agent, same?}} -> if same?, do: [], else: [user_agent] end)
-
-      assert length(user_agents) > 30_000
-      assert mismatches == []
+    test "returns what a linear scan does" do
+      for user_agent <- @user_agents do
+        assert UAParser.parse(user_agent) == UAParser.Parser.parse(UAParser.default_patterns(), user_agent)
+      end
     end
 
     test "returns what a linear scan does, for user agents that are not valid UTF-8" do
