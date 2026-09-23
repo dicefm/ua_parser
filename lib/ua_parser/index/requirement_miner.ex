@@ -16,8 +16,8 @@ defmodule UAParser.Index.RequirementMiner do
   # A requirement must never exclude a string that could match, so anything
   # that cannot be proven yields `nil`. Quantifiers, wildcards, ranges and
   # negated classes break a literal run, only mandatory groups are mined,
-  # and lookarounds never are. Literals are lowercased, and a class is mined
-  # only when all its members lowercase to the same character, like `[Bb]`.
+  # and lookarounds never are. Literals are ASCII-lowercased, and a class is
+  # mined only when all its members lowercase to the same character, like `[Bb]`.
 
   # A required literal has to be distinctive to be worth indexing; a one or
   # two character string appears in almost every user agent. Three is where
@@ -248,7 +248,7 @@ defmodule UAParser.Index.RequirementMiner do
     inner = binary_part(class, 1, byte_size(class) - 2)
 
     with {:ok, members} <- class_members(inner, []),
-         [<<char>>] <- members |> Enum.map(&String.downcase/1) |> Enum.uniq() do
+         [<<char>>] <- members |> Enum.map(&String.downcase(&1, :ascii)) |> Enum.uniq() do
       {:ok, char}
     else
       _other -> :error
@@ -329,10 +329,10 @@ defmodule UAParser.Index.RequirementMiner do
   # still present once both sides are folded - so it cannot exclude a
   # pattern that would have matched.
   defp fold_case(nil), do: nil
-  defp fold_case({:all, literal}), do: {:all, String.downcase(literal)}
+  defp fold_case({:all, literal}), do: {:all, String.downcase(literal, :ascii)}
 
   defp fold_case({:any, literals}),
-    do: {:any, literals |> Enum.map(&String.downcase/1) |> Enum.uniq()}
+    do: {:any, literals |> Enum.map(&String.downcase(&1, :ascii)) |> Enum.uniq()}
 
   defp viable?({:all, literal}), do: byte_size(literal) >= @min_all_length
   defp viable?({:any, literals}), do: Enum.all?(literals, &(byte_size(&1) >= @min_any_length))

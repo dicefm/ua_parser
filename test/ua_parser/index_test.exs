@@ -34,6 +34,15 @@ defmodule UAParser.IndexTest do
       assert length(user_agents) > 30_000
       assert mismatches == []
     end
+
+    test "returns what a linear scan does, for user agents that are not valid UTF-8" do
+      for user_agent <- [
+            <<206, "Accoona-AI-Agent/1.1.1 (crawler at accoona dot com)">>,
+            <<"Mozilla/5.0 (Windows; U; Win98; nl-NL; rv:1.7.2) Gecko/20040804 ", 200, "Netscape/7.2 (ax)">>
+          ] do
+        assert UAParser.parse(user_agent) == UAParser.Parser.parse(UAParser.default_patterns(), user_agent)
+      end
+    end
   end
 
   describe "candidates/2" do

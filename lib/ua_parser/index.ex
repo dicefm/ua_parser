@@ -69,8 +69,9 @@ defmodule UAParser.Index do
   """
   @spec candidates(t(), binary()) :: [keyword()]
   def candidates(%__MODULE__{patterns: patterns, always: always, pattern: pattern, by_literal: by_literal}, string) do
-    # Literals are mined lowercased, so the string is folded to match.
-    folded = String.downcase(string)
+    # Literals are mined with ASCII lowercased, so the string is folded the
+    # same way. Folding only ASCII also leaves invalid UTF-8 bytes alone.
+    folded = String.downcase(string, :ascii)
 
     folded
     |> scan(pattern, by_literal, 0, byte_size(folded), always)
