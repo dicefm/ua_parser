@@ -22,7 +22,7 @@ defmodule UAParser do
   """
   def parse(nil), do: parse("")
   def parse(ua), do: parse(ua, default_patterns())
-  def parse(ua, pattern), do: Parser.parse(pattern, ua)
+  def parse(ua, pattern), do: pattern |> searchable() |> Parser.parse(ua)
 
   @doc """
   Parse a user-agent string against `patterns` with options.
@@ -48,11 +48,15 @@ defmodule UAParser do
       %UAParser.Device{}
 
   """
-  def parse(ua, patterns, opts), do: Parser.parse(patterns, ua, opts)
+  def parse(ua, patterns, opts), do: patterns |> searchable() |> Parser.parse(ua, opts)
 
   @doc """
   The patterns `parse/1` uses: the bundled `patterns.yml`, as a
   `{user_agent, os, device}` tuple.
   """
   def default_patterns, do: Storage.list()
+
+  # The bundled patterns are searched through their indexes; other patterns
+  # have none, so they're scanned in order.
+  defp searchable(patterns), do: Storage.indexes_for(patterns) || patterns
 end
