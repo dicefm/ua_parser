@@ -82,4 +82,29 @@ defmodule UAParserTest do
       end
     end
   end
+
+  describe "with the bundled patterns" do
+    @user_agents [
+      @user_agent,
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+      "Mozilla/5.0 (Linux; Android 14; SM-S918B Build/UP1A; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/139.0.0.0 Mobile Safari/537.36",
+      "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+      "  python-requests/2.32.3  ",
+      "not a user agent at all",
+      ""
+    ]
+
+    test "returns what a linear scan of the same patterns does" do
+      # Not the bundled patterns any more, so scanned linearly, but a pattern
+      # that never matches leaves the results unchanged.
+      never = [regex: ~r/(?!)/]
+      linear = UAParser.default_patterns() |> Tuple.to_list() |> Enum.map(&[never | &1]) |> List.to_tuple()
+
+      for user_agent <- @user_agents, only <- [[:browser, :os, :device], [:browser, :os], [:device], []] do
+        assert UAParser.parse(user_agent, UAParser.default_patterns(), only: only) ==
+                 UAParser.parse(user_agent, linear, only: only),
+               "#{inspect(user_agent)} with only: #{inspect(only)}"
+      end
+    end
+  end
 end

@@ -3,6 +3,7 @@ defmodule UAParser.Parser do
   Handle parsing the user-agent string.
   """
 
+  alias UAParser.Index
   alias UAParser.Parsers.{Device, OperatingSystem, UA}
 
   @parts [:browser, :os, :device]
@@ -79,6 +80,8 @@ defmodule UAParser.Parser do
   defp maybe_parse(false, _patterns, _user_agent, parser) do
     parser.parse(nil)
   end
+
+  defp search(%Index{} = index, string), do: index |> Index.candidates(string) |> search(string)
 
   defp search(groups, string) do
     groups
