@@ -50,6 +50,14 @@ iex> ua.device
 %UAParser.Device{}
 ```
 
+Each part's index takes several MB of memory. To index only the parts
+you parse, list them in `:indexed_parts` (all three by default). A part
+left out still parses the same, by trying its patterns one by one:
+
+```elixir
+config :ua_parser, indexed_parts: [:browser, :os]
+```
+
 Retrieving and parsing a user-agent string from Plug:
 
 ```elixir

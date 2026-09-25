@@ -33,6 +33,16 @@ defmodule UAParser do
       need. The device list is the largest.
 
   Any other patterns are tried one by one, in order.
+
+  ## Configuration
+
+  Each index takes several MB of memory. To index only the parts you
+  parse, list them in `:indexed_parts` (all three by default):
+
+      config :ua_parser, indexed_parts: [:browser, :os]
+
+  A part left out still parses the same, by trying its patterns one by
+  one.
   """
 
   alias UAParser.{Parser, Storage}
